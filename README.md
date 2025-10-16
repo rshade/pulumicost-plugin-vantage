@@ -12,6 +12,14 @@ A Go-based adapter that fetches normalized cost/usage data from Vantage's REST A
 - FOCUS 1.2 compatible records
 - Comprehensive error handling and observability
 
+## Limitations
+
+- Read-only adapter (cannot create or modify Vantage resources)
+- No direct cost optimization recommendations (handled by PulumiCost analyzers)
+- Forecast functionality requires Cost Report tokens
+- Rate limiting may affect large data syncs
+- Tag cardinality limits may require filtering for performance
+
 ## Quick Start
 
 ### Prerequisites
@@ -128,4 +136,4 @@ prompts/                       # OpenCode prompts
 
 ## License
 
-[Your License Here]
+Licensed under the [Apache License, Version 2.0](LICENSE).
