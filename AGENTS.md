@@ -1,37 +1,30 @@
 # AGENTS.md - PulumiCost Vantage Plugin
 
 ## Build/Lint/Test Commands
-- `make build` - Build the binary
-- `make test` - Run all tests
-- `make lint` - Run golangci-lint
-- `make fmt` - Format code with gofmt/goimports
-- `go test ./... -v` - Run tests with verbose output
-- `go test -run TestName` - Run single test
-- `golangci-lint run` - Lint code
+- `make build` - Build binary
+- `make test` - Run all tests with race detection
+- `make test-coverage` - Run tests with coverage report
+- `make lint` - Run golangci-lint (revive, govet, gocyclo, staticcheck)
+- `make fmt` - Format with gofmt/goimports
+- `go test -run TestName ./... -v` - Run single test
+- `golangci-lint run` - Direct lint command
 
 ## Code Style Guidelines
-- **Language**: Go 1.22+
-- **Imports**: Standard library first, then third-party, then internal packages
-- **Naming**: camelCase for variables/functions, PascalCase for exported types
-- **Error Handling**: Return errors, use fmt.Errorf for wrapping, check context cancellation
-- **Types**: Use structs with json/yaml tags, implement interfaces explicitly
-- **Logging**: Structured logging with adapter=vantage, operation, attempt fields
-- **Security**: Never log tokens, use environment variables for secrets
+- **Language**: Go 1.24.7+
+- **Imports**: Standard library → third-party → internal packages
+- **Naming**: camelCase variables/functions, PascalCase exported types
+- **Error Handling**: Return errors, fmt.Errorf wrapping, context cancellation checks
+- **Types**: Structs with json/yaml tags, explicit interface implementation
+- **Logging**: Structured with adapter=vantage, operation, attempt fields
+- **Security**: Never log tokens, use env vars for secrets
 
 ## Project Structure
-- `cmd/pulumicost-vantage/` - CLI entry point with Cobra commands
-- `internal/vantage/client/` - REST client with retry/backoff logic
-- `internal/vantage/adapter/` - Mapping and sync logic for FOCUS 1.2
-- `internal/vantage/contracts/` - Golden test fixtures
-- `test/wiremock/` - Mock server configurations
+- `cmd/pulumicost-vantage/` - CLI with Cobra
+- `internal/vantage/client/` - REST client with retry/backoff
+- `internal/vantage/adapter/` - FOCUS 1.2 mapping/sync logic
+- `test/wiremock/` - Mock server configs
 
-## Key Interfaces
-- `Client{Costs(ctx, q), Forecast(ctx, token, q)}`
-- `Adapter{Sync(ctx, cfg, sink)}`
-- `Sink` - For persisting cost records (from pulumicost-core)
-
-## Testing
-- Unit tests with ≥80% coverage for client, ≥70% overall
-- Contract tests using Wiremock for API mocking
-- Golden file tests for mapping validation
-- `make wiremock-up/down` for mock server management
+## Testing Requirements
+- ≥80% client coverage, ≥70% overall
+- Contract tests with Wiremock, golden file validation
+- `make wiremock-up/down` for mock server

@@ -52,3 +52,4 @@ test/wiremock/mappings/
 # Temp files
 *.tmp
 *.bak
+pulumicost-vantage
