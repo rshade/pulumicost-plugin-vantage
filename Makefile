@@ -38,7 +38,7 @@ test-coverage:
 
 lint:
 	@echo "Running golangci-lint..."
-	@golangci-lint run ./... --deadline=5m
+	@golangci-lint run ./... --timeout=5m
 
 fmt:
 	@echo "Formatting code..."

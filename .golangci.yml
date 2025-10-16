@@ -1,6 +1,7 @@
+version: 2
+
 run:
   timeout: 5m
-  deadline: 5m
   build-tags: []
   modules-download-mode: readonly
 
@@ -14,17 +15,10 @@ linters:
     - revive
     - govet
     - gocyclo
-    - gofmt
-    - goimports
     - staticcheck
-    - gosimple
     - ineffassign
     - unused
-    - deadcode
-    - varcheck
-    - structcheck
     - errcheck
-    - typecheck
 
 linters-settings:
   gocyclo:
@@ -35,10 +29,6 @@ linters-settings:
         arguments:
           - checkPrivateReceivers
           - checkTypeAssertions
-  goimports:
-    local-prefixes: github.com/PulumiCost/pulumicost-plugin-vantage
-  gofmt:
-    simplify: true
 
 issues:
   exclude-use-default: false
