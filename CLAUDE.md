@@ -209,9 +209,158 @@ Set `VANTAGE_DEBUG=1` in environment (implementation detail—check adapter/diag
 - Actual field availability varies by provider and Vantage configuration
 - No VQL filter support in v1; relies on curated Cost Reports
 
+## Development Roadmap & Issue Tracking
+
+**v0.1.0 MVP Structure**: 9 phases, 36 GitHub issues, 107-144 estimated hours
+
+### Phases Overview
+- **Phase 1**: Bootstrap ✅ (complete)
+- **Phase 2**: CLI & Configuration (3 issues, #3-#5)
+- **Phase 3**: REST Client (5 issues, #6-#10)
+- **Phase 4**: Adapter Core (4 issues, #11-#12, #30-#31)
+- **Phase 5**: Sync & Backfill (4 issues, #13-#16)
+- **Phase 6**: Forecast (1 issue, #17)
+- **Phase 7**: Testing (5 issues, #18-#22)
+- **Phase 8**: Documentation & Release (7 issues, #23-#29)
+- **Phase 9**: CI/CD & Hardening (7 issues, #33-#39)
+
+### Issue Structure
+Each GitHub issue includes:
+- **Goal**: What to build
+- **Acceptance Criteria**: Testable checkpoints (must all pass before closing)
+- **Effort**: S(mall) 1-2h, M(edium) 3-5h, L(arge) 6-8h
+- **Dependencies**: What issues must be done first
+- **References**: Design sections and prompt files
+
+**Example workflow:**
+1. Pick issue from GitHub (e.g., #3: CLI Bootstrap)
+2. Read acceptance criteria
+3. Use corresponding prompt file (e.g., `prompts/bootstrap.md`)
+4. Reference design document (e.g., Section 13)
+5. Implement until all criteria checked
+6. Run `make lint && make test`
+7. Open PR, review, merge
+
+### Prompt Files & Phases
+```
+prompts/bootstrap.md              → Phase 2 (CLI & Config)
+prompts/client.md                 → Phase 3 (REST Client)
+prompts/adapter.md                → Phases 4-5 (Adapter & Sync)
+prompts/tests.md                  → Phase 7 (Testing)
+prompts/docs.md                   → Phase 8 (Documentation)
+prompts/ci-and-repo-hardening.md  → Phase 9 (CI/CD & Hardening)
+```
+
+### Critical Path
+Must follow this order (dependencies matter):
+```
+Phase 2 (CLI) → Phase 3 (Client) → Phase 4 (Adapter) → Phase 5 (Sync)
+                                 ↓
+                            Phase 6 (Forecast)
+                                 ↓
+Phase 7 (Testing can start after Phase 3) → Phase 8 (Docs) → Phase 9 (Release)
+```
+
+### For AI-Assisted Development (Claude Code / OpenCode)
+1. Load `pulumi_cost_vantage_adapter_design_draft_v_0.md` as context
+2. Select phase prompt file (e.g., `prompts/client.md`)
+3. Reference related GitHub issues for acceptance criteria
+4. Generate code until all criteria met
+5. Commit with Conventional Commits format (see below)
+
+### Conventional Commits & Commitlint
+**Format**: `type(scope): subject`
+
+**Types**: feat, fix, docs, style, refactor, perf, test, chore, ci, revert
+**Scopes**: infra, client, adapter, config, test, docs
+
+**Examples**:
+```
+feat(client): add exponential backoff retry logic
+fix(adapter): correct FOCUS field mapping for amortized_cost
+test(client): add pagination contract tests
+chore(deps): update Go modules
+```
+
+**Validation**:
+```bash
+cat COMMIT_MESSAGE.md | npx commitlint
+```
+
+Configuration in `commitlint.config.js` enforces:
+- Type must be one of 10 allowed types
+- Scope must be lowercase
+- Subject required, no trailing period
+- Header max 100 characters
+
+### Repository Organization
+- `prompts/` - OpenCode/Claude Code implementation guides (now includes PROJECT_SUMMARY.md and DEVELOPMENT_ROADMAP.md)
+- `docs/` - User documentation (config, troubleshooting, deployment)
+- `.github/` - GitHub workflows, templates, actions config
+- `internal/vantage/` - Adapter code (client, adapter, contracts)
+- `cmd/pulumicost-vantage/` - CLI entry point
+- `test/wiremock/` - Mock server fixtures
+
+### Success Criteria for v0.1.0
+- ✓ All 36 issues closed
+- ✓ ≥70% overall test coverage
+- ✓ ≥80% client package coverage
+- ✓ 0 linting errors (`make lint` passes)
+- ✓ 0 security vulnerabilities
+- ✓ Wiremock contract tests passing
+- ✓ Golden fixture tests passing
+- ✓ End-to-end integration test passing
+- ✓ Complete documentation (CONFIG.md, TROUBLESHOOTING.md, FORECAST.md)
+- ✓ GitHub Actions CI/CD passing on all workflows
+- ✓ v0.1.0 GitHub release published
+
+## Post-Implementation Cleanup
+
+Once all 36 GitHub issues are closed and v0.1.0 is feature-complete:
+
+### Prompts Directory
+The `prompts/` directory contains implementation guides for Claude Code / OpenCode and should be archived or removed once development is complete:
+
+**Files to remove or archive:**
+```bash
+prompts/bootstrap.md                  # No longer needed
+prompts/client.md                     # No longer needed
+prompts/adapter.md                    # No longer needed
+prompts/tests.md                      # No longer needed
+prompts/docs.md                       # No longer needed
+prompts/ci-and-repo-hardening.md      # No longer needed
+prompts/PROJECT_SUMMARY.md            # Archive to docs/ or remove
+prompts/DEVELOPMENT_ROADMAP.md        # Archive to docs/ or remove
+```
+
+**Optional: Archive instead of delete**
+```bash
+mkdir docs/archive-prompts/
+mv prompts/* docs/archive-prompts/
+rmdir prompts
+```
+
+### Keep in Repository Root
+- `CLAUDE.md` - Future developer reference (this file, keep updated)
+- `TODO.md` - Implementation record and history (keep for reference)
+- `pulumi_cost_vantage_adapter_design_draft_v_0.md` - Technical design (keep indefinitely)
+- `AGENTS.md` - Build/test procedures (keep updated)
+
+### Documentation to Keep
+Everything in `docs/` directory:
+- `docs/CONFIG.md` - User-facing configuration reference
+- `docs/TROUBLESHOOTING.md` - Support and debugging
+- `docs/FORECAST.md` - Feature documentation
+- `docs/DEPLOYMENT.md` - Operations guide
+- `docs/examples/` - Example configurations
+
+This keeps the repository clean while preserving historical implementation guidance in archived form if needed for future versions.
+
 ## Troubleshooting
 
 **Auth errors**: Verify `PULUMICOST_VANTAGE_TOKEN` is set and valid
 **Rate limits (429)**: Adapter automatically backs off; check `X-RateLimit-Reset` header
 **Pagination issues**: Enable verbose logging and inspect cursor values
 **Tag mapping failures**: Review `tag_prefix_filters` and allow/deny lists in config
+**Commit validation fails**: Ensure message follows Conventional Commits format; check `commitlint.config.js`
+**Issue not clear**: Read GitHub issue body for acceptance criteria; reference corresponding prompt file; check design document section

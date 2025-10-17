@@ -1,0 +1,61 @@
+name: Contract Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-tests:
+    name: Contract Tests
+    runs-on: ubuntu-latest
+    services:
+      wiremock:
+        image: wiremock/wiremock:3
+        ports:
+          - 8080:8080
+        options: >-
+          --health-cmd "curl --fail http://localhost:8080/__admin/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        volumes:
+          - ${{ github.workspace }}/test/wiremock:/home/wiremock
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24.7'
+          cache: true
+
+      - name: Wait for Wiremock to be ready
+        run: |
+          timeout 60 bash -c 'until curl --silent --fail http://localhost:8080/__admin/health; do sleep 2; done'
+          echo "Wiremock is ready"
+
+      - name: Run contract tests
+        run: |
+          # Run tests that specifically target the mock endpoints
+          go test -v -race ./internal/vantage/... -run "Test.*Contract|Test.*Mock" --timeout=10m
+        env:
+          WIREMOCK_URL: http://localhost:8080
+
+      - name: Archive Wiremock logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiremock-logs
+          path: |
+            test/wiremock/__files/
+            !test/wiremock/__files/**/*.json
