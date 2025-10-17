@@ -1,0 +1,22 @@
+# Auto normalize line endings to LF for all text files
+* text=auto eol=lf
+
+# Binary files
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# Go-specific
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+Makefile text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# YAML/JSON
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf

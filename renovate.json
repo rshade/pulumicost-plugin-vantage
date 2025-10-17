@@ -1,6 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabled": true,
   "extends": [
-    "config:recommended"
-  ]
+    "config:base"
+  ],
+  "description": "Renovate config for pulumicost-plugin-vantage. Disabled by default. Enable if needed for advanced dependency management.",
+  "schedule": [
+    "before 3am on Monday"
+  ],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "groupName": "dependencies",
+  "gomod": {
+    "enabled": true
+  },
+  "github-actions": {
+    "enabled": true
+  }
 }
