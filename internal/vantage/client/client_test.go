@@ -85,7 +85,7 @@ func TestClient_Costs(t *testing.T) {
 		assert.Contains(t, r.URL.Query()["metrics[]"], "cost")
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
+		_ = json.NewEncoder(w).Encode(mockResponse)
 	}))
 	defer server.Close()
 
@@ -139,7 +139,7 @@ func TestClient_Forecast(t *testing.T) {
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
+		_ = json.NewEncoder(w).Encode(mockResponse)
 	}))
 	defer server.Close()
 
@@ -168,7 +168,7 @@ func TestClient_Forecast(t *testing.T) {
 
 func TestClient_RetryOn5xx(t *testing.T) {
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		if callCount == 1 {
 			// First call fails with 503
@@ -177,7 +177,7 @@ func TestClient_RetryOn5xx(t *testing.T) {
 		}
 		// Second call succeeds
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
 	}))
 	defer server.Close()
 
@@ -203,7 +203,7 @@ func TestClient_RetryOn5xx(t *testing.T) {
 }
 
 func TestClient_RateLimitHandling(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-RateLimit-Reset", "60") // Reset in 60 seconds
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
@@ -251,14 +251,14 @@ func TestPager_NextPage(t *testing.T) {
 	}
 
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 
 		if callCount == 1 {
-			json.NewEncoder(w).Encode(firstResponse)
+			_ = json.NewEncoder(w).Encode(firstResponse)
 		} else {
-			json.NewEncoder(w).Encode(secondResponse)
+			_ = json.NewEncoder(w).Encode(secondResponse)
 		}
 	}))
 	defer server.Close()
@@ -330,7 +330,7 @@ func TestPager_HasMore(t *testing.T) {
 func TestPager_AllPages(t *testing.T) {
 	// Mock server response with multiple pages
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 
@@ -387,7 +387,7 @@ func TestPager_AllPages(t *testing.T) {
 
 func TestClient_ForecastRetry(t *testing.T) {
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		if callCount == 1 {
 			// First call fails with 503

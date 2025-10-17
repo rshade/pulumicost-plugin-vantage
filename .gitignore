@@ -53,3 +53,5 @@ test/wiremock/mappings/
 *.tmp
 *.bak
 pulumicost-vantage
+COMMIT_MESSAGE.md
+PR_MESSAGE.md

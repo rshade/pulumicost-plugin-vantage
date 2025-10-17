@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "provider": "gcp",
+      "service": "Compute Engine",
+      "account": "my-gcp-project",
+      "project": "production-api",
+      "region": "us-central1",
+      "resource_id": "instance-1",
+      "tags": {
+        "environment": "production",
+        "component": "api"
+      },
+      "cost": 67.80,
+      "usage_quantity": 168.0,
+      "usage_unit": "hours",
+      "list_cost": 72.00,
+      "amortized_cost": 65.00,
+      "currency": "USD",
+      "bucket_start": "2024-01-01T00:00:00Z",
+      "bucket_end": "2024-01-02T00:00:00Z"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
+}

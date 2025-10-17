@@ -1,0 +1,18 @@
+[
+  {
+    "timestamp": "2024-02-01T00:00:00Z",
+    "net_cost": 175.50,
+    "currency": "USD",
+    "source_report_token": "cr_test_report",
+    "query_hash": "test_forecast_hash",
+    "metric_type": "forecast"
+  },
+  {
+    "timestamp": "2024-02-02T00:00:00Z",
+    "net_cost": 180.25,
+    "currency": "USD",
+    "source_report_token": "cr_test_report",
+    "query_hash": "test_forecast_hash",
+    "metric_type": "forecast"
+  }
+]

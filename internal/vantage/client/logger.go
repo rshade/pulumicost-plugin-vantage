@@ -24,10 +24,10 @@ type Logger interface {
 // noopLogger provides a no-op implementation of Logger
 type noopLogger struct{}
 
-func (n *noopLogger) Debug(ctx context.Context, msg string, fields map[string]interface{}) {}
-func (n *noopLogger) Info(ctx context.Context, msg string, fields map[string]interface{})  {}
-func (n *noopLogger) Warn(ctx context.Context, msg string, fields map[string]interface{})  {}
-func (n *noopLogger) Error(ctx context.Context, msg string, fields map[string]interface{}) {}
+func (n *noopLogger) Debug(_ context.Context, _ string, _ map[string]interface{}) {}
+func (n *noopLogger) Info(_ context.Context, _ string, _ map[string]interface{})  {}
+func (n *noopLogger) Warn(_ context.Context, _ string, _ map[string]interface{})  {}
+func (n *noopLogger) Error(_ context.Context, _ string, _ map[string]interface{}) {}
 
 // NewNoopLogger returns a logger that discards all messages
 func NewNoopLogger() Logger {

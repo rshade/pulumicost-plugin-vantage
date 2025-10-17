@@ -131,7 +131,9 @@ func (c *httpClient) doCostsRequestOnce(ctx context.Context, query Query) (Page,
 	if err != nil {
 		return Page{}, fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Handle rate limiting
 	if resp.StatusCode == 429 {
@@ -244,7 +246,9 @@ func (c *httpClient) doForecastRequestOnce(ctx context.Context, reportToken stri
 	if err != nil {
 		return Forecast{}, fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Handle rate limiting
 	if resp.StatusCode == 429 {

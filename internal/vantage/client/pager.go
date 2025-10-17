@@ -8,9 +8,10 @@ import (
 
 // Pager provides cursor-based pagination for cost queries
 type Pager struct {
-	client Client
-	query  Query
-	logger Logger
+	client     Client
+	query      Query
+	logger     Logger
+	hasStarted bool
 }
 
 // NewPager creates a new pager for the given query
@@ -24,6 +25,11 @@ func NewPager(client Client, query Query, logger Logger) *Pager {
 
 // NextPage fetches the next page of cost data
 func (p *Pager) NextPage(ctx context.Context) (Page, error) {
+	// If we've already started and there's no cursor, we've exhausted all pages
+	if p.hasStarted && p.query.Cursor == "" {
+		return Page{}, fmt.Errorf("no more pages available")
+	}
+
 	currentQuery := p.query
 	if p.query.Cursor != "" {
 		currentQuery.Cursor = p.query.Cursor
@@ -38,7 +44,8 @@ func (p *Pager) NextPage(ctx context.Context) (Page, error) {
 		return Page{}, fmt.Errorf("fetching costs page: %w", err)
 	}
 
-	// Update cursor for next page
+	// Mark that we've started paging and update cursor for next page
+	p.hasStarted = true
 	p.query.Cursor = page.NextCursor
 
 	p.logger.Debug(ctx, "Fetched costs page", map[string]interface{}{

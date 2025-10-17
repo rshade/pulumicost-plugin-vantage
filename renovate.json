@@ -2,7 +2,9 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "enabled": true,
   "extends": [
-    "config:base"
+    "config:base",
+    "config:recommended",
+    "config:extended"
   ],
   "description": "Renovate config for pulumicost-plugin-vantage. Disabled by default. Enable if needed for advanced dependency management.",
   "schedule": [
