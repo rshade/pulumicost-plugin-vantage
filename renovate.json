@@ -3,8 +3,7 @@
   "enabled": true,
   "extends": [
     "config:base",
-    "config:recommended",
-    "config:extended"
+    "config:recommended"
   ],
   "description": "Renovate config for pulumicost-plugin-vantage. Disabled by default. Enable if needed for advanced dependency management.",
   "schedule": [
