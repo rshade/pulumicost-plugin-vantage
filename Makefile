@@ -6,6 +6,8 @@ MAIN_PACKAGE=./cmd/$(BINARY_NAME)
 GO_VERSION=1.24.7
 COVERAGE_THRESHOLD=70
 CLIENT_COVERAGE_THRESHOLD=80
+VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo v0.1.0-dev)
+LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 
 # Default target
 help:
@@ -22,8 +24,8 @@ help:
 	@echo "  make help               - Show this help message"
 
 build:
-	@echo "Building $(BINARY_NAME)..."
-	@go build -o bin/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "Building $(BINARY_NAME) version $(VERSION)..."
+	@go build $(LDFLAGS) -o bin/$(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "Binary built: bin/$(BINARY_NAME)"
 
 test:

@@ -1,10 +1,14 @@
 # Forecast Snapshots
 
-This document explains how the PulumiCost Vantage plugin handles forecast data and snapshots.
+This document explains how the PulumiCost Vantage plugin handles forecast
+data and snapshots.
 
 ## Overview
 
-The plugin supports optional forecast functionality that retrieves cost projections from Vantage's `/cost_reports/{token}/forecast` endpoint. Forecast data is stored as a separate metric family to distinguish it from actual historical cost data.
+The plugin supports optional forecast functionality that retrieves cost
+projections from Vantage's `/cost_reports/{token}/forecast` endpoint. Forecast
+data is stored as a separate metric family to distinguish it from actual
+historical cost data.
 
 ## How Forecast Works
 
@@ -12,7 +16,7 @@ The plugin supports optional forecast functionality that retrieves cost projecti
 
 The plugin calls Vantage's forecast endpoint to retrieve projected cost data:
 
-```
+```http
 GET /cost_reports/{token}/forecast
 Authorization: Bearer <token>
 ```
@@ -96,18 +100,20 @@ params:
 
 When using the `forecast` command with `--out`:
 
-```
+```text
 ./data/forecast.json  # JSON format
 ./data/forecast.parquet  # Parquet format (if supported)
 ```
 
 ### Database Storage
 
-Forecast records are stored in the same data store as regular cost data but tagged with `metric_type = "forecast"`.
+Forecast records are stored in the same data store as regular cost data but
+tagged with `metric_type = "forecast"`.
 
 ### Sink Integration
 
-Forecast data is written through the same Sink interface as cost data, allowing flexible storage options (database, parquet files, etc.).
+Forecast data is written through the same Sink interface as cost data,
+allowing flexible storage options (database, parquet files, etc.).
 
 ## Analysis and Reporting
 
@@ -152,17 +158,20 @@ Forecast data enables:
 
 ### Common Issues
 
-**"Forecast not available"**
+#### "Forecast not available"
+
 - Verify Cost Report token is configured
 - Check if forecast is enabled in Vantage workspace
 - Confirm sufficient historical data exists
 
-**"Empty forecast results"**
+#### "Empty forecast results"
+
 - Check date ranges (forecast covers future periods)
 - Verify report configuration includes forecast-enabled services
 - Review Vantage documentation for forecast requirements
 
-**"Forecast accuracy issues"**
+#### "Forecast accuracy issues"
+
 - Ensure sufficient historical data (minimum 3-6 months recommended)
 - Check for significant cost pattern changes
 - Consider adjusting forecast parameters in Vantage
@@ -180,10 +189,12 @@ Look for log entries with `operation=forecast` for troubleshooting.
 
 ## Best Practices
 
-### Configuration
+### Configuration Best Practices
 
-1. **Enable selectively**: Only enable forecast when needed to reduce API load
-2. **Schedule appropriately**: Weekly snapshots typically sufficient for most use cases
+1. **Enable selectively**: Only enable forecast when needed to reduce
+   API load
+2. **Schedule appropriately**: Weekly snapshots typically sufficient for
+   most use cases
 3. **Monitor accuracy**: Regularly review forecast vs actual cost comparisons
 
 ### Operations

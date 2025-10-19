@@ -2,7 +2,10 @@
 
 ## Our Pledge
 
-We are committed to providing a welcoming and inspiring community for all. We pledge that everyone involved in the PulumiCost Vantage Plugin project — whether as a contributor, maintainer, or user — will be treated with respect and dignity.
+We are committed to providing a welcoming and inspiring community for all.
+We pledge that everyone involved in the PulumiCost Vantage Plugin project
+— whether as a contributor, maintainer, or user — will be treated with
+respect and dignity.
 
 ## Our Standards
 
@@ -24,10 +27,14 @@ Examples of unacceptable behavior include:
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the project maintainers. All complaints will be reviewed and
+investigated promptly and fairly.
 
-Project maintainers are obligated to maintain confidentiality with regard to the reporter of an incident.
+Project maintainers are obligated to maintain confidentiality with regard
+to the reporter of an incident.
 
 ## Attribution
 
-This Code of Conduct is adapted from the Contributor Covenant, version 2.0, available at https://www.contributor-covenant.org/version/2/0/code_of_conduct.html
+This Code of Conduct is adapted from the Contributor Covenant, version 2.0,
+available at <https://www.contributor-covenant.org/version/2/0/code_of_conduct.html>
