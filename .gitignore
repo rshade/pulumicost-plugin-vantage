@@ -54,4 +54,7 @@ test/wiremock/mappings/
 *.bak
 pulumicost-vantage
 COMMIT_MESSAGE.md
-PR_MESSAGE.mdGithub_Development_Prompt.md
+PR_MESSAGE.md
+Github_Development_Prompt.md
+Github_Development_Prompt_Grok.md
+node_modules/

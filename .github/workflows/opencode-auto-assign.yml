@@ -1,0 +1,23 @@
+name: Auto Assign Issues to OpenCode
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-assign:
+    if: |
+      contains(github.event.issue.title, 'bug') ||
+      contains(github.event.issue.title, 'fix') ||
+      contains(github.event.issue.title, 'refactor') ||
+      contains(github.event.issue.body, 'opencode') ||
+      contains(github.event.issue.body, '/oc')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Auto-assign to opencode
+        run: |
+          gh issue edit ${{ github.event.issue.number }} --add-assignee opencode
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

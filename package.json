@@ -1,0 +1,14 @@
+{
+  "name": "pulumicost-plugin-vantage",
+  "version": "1.0.0",
+  "description": "PulumiCost Vantage Plugin",
+  "scripts": {
+    "commitlint": "commitlint --edit $1",
+    "markdownlint": "npx markdownlint-cli '**/*.md' --ignore node_modules"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
+    "markdownlint-cli": "^0.42.0"
+  }
+}
