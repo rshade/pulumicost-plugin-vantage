@@ -1,53 +1,71 @@
 # Forecast Snapshots
 
-This document explains how the PulumiCost Vantage plugin handles forecast
-data and snapshots.
+This document explains how the PulumiCost Vantage plugin handles forecast data
+and snapshots.
 
 ## Overview
 
 The plugin supports optional forecast functionality that retrieves cost
 projections from Vantage's `/cost_reports/{token}/forecast` endpoint. Forecast
-data is stored as a separate metric family to distinguish it from actual
-historical cost data.
+data is stored as a separate metric type to distinguish it from actual historical
+cost data.
 
-## How Forecast Works
+**Key features:**
 
-### Forecast API
+- Retrieves projected cost data from Vantage API
+- Stores forecast as separate records with `metric_type="forecast"`
+- Supports weekly snapshots with configurable retention
+- Enables MAPE (Mean Absolute Percentage Error) accuracy evaluation
+- Fully integrated with regular sync operations
 
-The plugin calls Vantage's forecast endpoint to retrieve projected cost data:
+## Forecast Data Flow
+
+### Step 1: Forecast Generation
+
+When enabled, the adapter calls Vantage's forecast endpoint:
 
 ```http
-GET /cost_reports/{token}/forecast
-Authorization: Bearer <token>
+GET /cost_reports/{report_token}/forecast
+Authorization: Bearer {api_token}
 ```
 
-### Data Structure
+**Request parameters**:
 
-Forecast records are stored with these characteristics:
+- Cost Report or Workspace token
+- Date range (typically future periods)
+- Grouping dimensions (provider, service, account, etc.)
+- Metrics to include (cost, usage, etc.)
 
-- **`metric_type`**: Set to `"forecast"` to distinguish from actual costs
-- **Time range**: Covers future periods (typically 3-12 months ahead)
-- **Dimensions**: Same grouping dimensions as cost data
-- **Metrics**: Projected costs, usage, and other metrics
-- **Source identification**: Links back to the original cost report
+### Step 2: Data Mapping
 
-### Storage Format
-
-Forecast data follows the same FOCUS 1.2 schema as regular cost data but includes:
+Forecast response is mapped to FOCUS 1.2 schema with `metric_type="forecast"`:
 
 ```json
 {
   "timestamp": "2025-01-01T00:00:00Z",
   "metric_type": "forecast",
-  "provider": "aws",
-  "service": "ec2",
-  "account_id": "123456789",
+  "cloud_provider": "AWS",
+  "service_name": "EC2",
+  "billing_account_id": "123456789",
   "net_cost": 1500.00,
   "usage_amount": 720.0,
-  "source_report_token": "cr_xxx",
-  "forecast_generated_at": "2024-10-01T00:00:00Z"
+  "source_id": "cr_abc123",
+  "line_item_id": "forecast_2024-10-01_aws_ec2"
 }
 ```
+
+### Step 3: Snapshot Creation & Storage
+
+- Forecast records are persisted via the Sink interface (same as cost data)
+- Multiple snapshots retained for historical comparison
+- Each snapshot includes generation timestamp
+- Records deduplicated by idempotency key
+
+### Step 4: Retention & Cleanup
+
+- **Default retention**: Last 8 snapshots
+- **Default frequency**: Weekly snapshots
+- Older snapshots automatically removed
 
 ## Snapshot Schedule
 
@@ -63,35 +81,114 @@ Forecast data follows the same FOCUS 1.2 schema as regular cost data but include
 - **Purpose**: Enable MAPE (Mean Absolute Percentage Error) evaluation
 - **Cleanup**: Automatic removal of older snapshots
 
-## Usage
+## Usage & Examples
 
-### CLI Command
+### Example 1: Enable Forecast in Regular Sync
 
-Generate a forecast snapshot:
+Include forecast snapshots with daily cost syncs:
+
+```yaml
+version: 0.1
+source: vantage
+credentials:
+  token: ${PULUMICOST_VANTAGE_TOKEN}
+params:
+  cost_report_token: "cr_abc123"
+  granularity: "day"
+  include_forecast: true  # Enable forecast
+  page_size: 5000
+  max_retries: 5
+```
+
+Run regular pull operation:
 
 ```bash
-./bin/pulumicost-vantage forecast --config ./config.yaml --out ./data/forecast.json
+pulumicost-vantage pull --config config.yaml
+# Syncs both historical costs and forecast snapshots
 ```
 
-### Configuration
+### Example 2: Generate Forecast Snapshot Separately
 
-Enable forecast in your configuration:
+Generate forecast data as standalone operation:
+
+```bash
+pulumicost-vantage forecast --config config.yaml --out ./data/forecast.json
+```
+
+Output file format:
+
+```json
+[
+  {
+    "timestamp": "2025-02-01T00:00:00Z",
+    "metric_type": "forecast",
+    "cloud_provider": "AWS",
+    "service_name": "EC2",
+    "billing_account_id": "123456789",
+    "net_cost": 2500.50,
+    "usage_amount": 750.0
+  },
+  {
+    "timestamp": "2025-03-01T00:00:00Z",
+    "metric_type": "forecast",
+    "cloud_provider": "AWS",
+    "service_name": "RDS",
+    "billing_account_id": "123456789",
+    "net_cost": 1200.75,
+    "usage_amount": 240.0
+  }
+]
+```
+
+### Example 3: Query Forecast Records
+
+Query forecast data alongside actual costs:
+
+```sql
+-- Get all forecast records
+SELECT * FROM costs WHERE metric_type = 'forecast'
+
+-- Compare actual vs forecast by month
+SELECT
+  DATE_TRUNC('month', timestamp) as month,
+  SUM(CASE WHEN metric_type = 'forecast' THEN net_cost ELSE 0 END) as
+    forecast_cost,
+  SUM(CASE WHEN metric_type != 'forecast' THEN net_cost ELSE 0 END) as
+    actual_cost
+FROM costs
+WHERE cloud_provider = 'AWS'
+GROUP BY DATE_TRUNC('month', timestamp)
+ORDER BY month DESC
+
+-- Get latest forecast snapshot
+SELECT * FROM costs
+WHERE metric_type = 'forecast'
+AND line_item_id LIKE 'forecast_latest_%'
+```
+
+### Example 4: Configuration with Snapshot Settings
+
+Configure forecast frequency and retention:
 
 ```yaml
+version: 0.1
+source: vantage
+credentials:
+  token: ${PULUMICOST_VANTAGE_TOKEN}
 params:
+  cost_report_token: "cr_abc123"
   include_forecast: true
-  cost_report_token: "cr_xxx"  # Required for forecast
-  forecast_snapshot_frequency: "weekly"  # Optional
-  forecast_retention_count: 8  # Optional
-```
-
-### Integration with Sync
-
-Forecast can be included in regular sync operations:
-
-```yaml
-params:
-  include_forecast: true  # Include forecast in pull operations
+  # Optional: configure snapshot behavior
+  # forecast_frequency: "weekly"      # weekly (default), daily, monthly
+  # forecast_retention_count: 8       # Keep 8 snapshots (default)
+  granularity: "day"
+  group_bys:
+    - provider
+    - service
+    - account
+  metrics:
+    - cost
+    - usage
 ```
 
 ## Output Locations
