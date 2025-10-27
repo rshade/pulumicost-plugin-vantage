@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
 
@@ -50,47 +51,17 @@ func parseParams(raw *rawConfig) (workspaceToken, costReportToken, granularitySt
 	if raw.Params == nil {
 		return
 	}
-	if ws, ok := raw.Params["workspace_token"].(string); ok {
-		workspaceToken = ws
-	}
-	if cr, ok := raw.Params["cost_report_token"].(string); ok {
-		costReportToken = cr
-	}
-	if g, ok := raw.Params["granularity"].(string); ok {
-		granularityStr = g
-	}
-	if s, ok := raw.Params["start_date"].(string); ok {
-		startDateStr = s
-	}
-	if e, ok := raw.Params["end_date"].(string); ok {
-		endDateStr = e
-	}
-	if gb, ok := raw.Params["group_bys"].([]interface{}); ok {
-		for _, v := range gb {
-			if str, ok := v.(string); ok {
-				groupBys = append(groupBys, str)
-			}
-		}
-	}
-	if m, ok := raw.Params["metrics"].([]interface{}); ok {
-		for _, v := range m {
-			if str, ok := v.(string); ok {
-				metrics = append(metrics, str)
-			}
-		}
-	}
-	if inc, ok := raw.Params["include_forecast"].(bool); ok {
-		includeForecast = inc
-	}
-	if ps, ok := raw.Params["page_size"].(int); ok {
-		pageSize = ps
-	}
-	if rts, ok := raw.Params["request_timeout_seconds"].(int); ok {
-		requestTimeoutSeconds = rts
-	}
-	if mr, ok := raw.Params["max_retries"].(int); ok {
-		maxRetries = mr
-	}
+	workspaceToken = cast.ToString(raw.Params["workspace_token"])
+	costReportToken = cast.ToString(raw.Params["cost_report_token"])
+	granularityStr = cast.ToString(raw.Params["granularity"])
+	startDateStr = cast.ToString(raw.Params["start_date"])
+	endDateStr = cast.ToString(raw.Params["end_date"])
+	groupBys = cast.ToStringSlice(raw.Params["group_bys"])
+	metrics = cast.ToStringSlice(raw.Params["metrics"])
+	includeForecast = cast.ToBool(raw.Params["include_forecast"])
+	pageSize = cast.ToInt(raw.Params["page_size"])
+	requestTimeoutSeconds = cast.ToInt(raw.Params["request_timeout_seconds"])
+	maxRetries = cast.ToInt(raw.Params["max_retries"])
 	return
 }
 
@@ -101,7 +72,7 @@ func parseDates(startDateStr, endDateStr string) (time.Time, *time.Time, error) 
 		startDateStr = envStartDate
 	}
 	if startDateStr == "" {
-		startDate = time.Now().AddDate(-1, 0, 0)
+		startDate = time.Now().UTC().AddDate(-1, 0, 0)
 	} else {
 		var err error
 		startDate, err = time.Parse("2006-01-02", startDateStr)

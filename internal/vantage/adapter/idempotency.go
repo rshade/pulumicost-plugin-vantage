@@ -25,7 +25,7 @@ func GenerateLineItemID(
 		row.BucketStart.Format("2006-01-02"), // Date only, not time
 	}
 
-	// Add dimensions in sorted order for consistency
+	// Add dimensions in fixed order for consistency
 	parts = append(parts, row.Provider)
 	parts = append(parts, row.Service)
 	parts = append(parts, row.Account)

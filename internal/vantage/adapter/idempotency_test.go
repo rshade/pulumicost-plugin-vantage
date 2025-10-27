@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 )
 
 // TestGenerateLineItemID_Determinism verifies that same inputs produce same ID
@@ -292,11 +293,11 @@ func TestGenerateLineItemID_SameTags_DifferentOrder(t *testing.T) {
 // TestGenerateLineItemID_DifferentMetrics produces different IDs
 func TestGenerateLineItemID_DifferentMetrics(t *testing.T) {
 	row := client.CostRow{
-		Provider:    "aws",
-		Service:     "EC2",
-		Account:     "123456789",
-		BucketStart: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
-		Cost:        100.0,
+		Provider:      "aws",
+		Service:       "EC2",
+		Account:       "123456789",
+		BucketStart:   time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
+		Cost:          100.0,
 		UsageQuantity: 720.0,
 	}
 	reportToken := "cr_test"
@@ -723,15 +724,15 @@ func TestGenerateLineItemID_SpecialCharactersInDimensions(t *testing.T) {
 func TestGenerateLineItemID_MultipleTagsConsistency(t *testing.T) {
 	// Create row with multiple tags
 	row := client.CostRow{
-		Provider:    "aws",
-		Service:     "EC2",
-		Account:     "123456789",
+		Provider: "aws",
+		Service:  "EC2",
+		Account:  "123456789",
 		Tags: map[string]string{
-			"env":          "prod",
-			"team":         "backend",
-			"cost-center":  "engineering",
-			"project":      "platform",
-			"version":      "v1",
+			"env":         "prod",
+			"team":        "backend",
+			"cost-center": "engineering",
+			"project":     "platform",
+			"version":     "v1",
 		},
 		BucketStart: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 		Cost:        100.0,

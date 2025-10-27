@@ -3,6 +3,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -301,6 +302,378 @@ func TestAdapter_SyncBackfill(t *testing.T) {
 	mockSink.AssertExpectations(t)
 }
 
+func TestAdapter_SyncChunked(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+		GroupBys:        []string{"provider", "service"},
+		Metrics:         []string{"cost"},
+		PageSize:        100,
+	}
+
+	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
+
+	// Mock responses for each month chunk
+	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
+		return q.StartAt.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) &&
+			q.EndAt.Equal(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC))
+	})).Return(client.Page{
+		Data:       []client.CostRow{},
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	mockSink.On("WriteRecords", mock.Anything, mock.Anything).Return(nil)
+
+	err := adapter.syncChunked(context.Background(), cfg, mockSink, startDate, endDate)
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockSink.AssertExpectations(t)
+}
+
+func TestAdapter_SyncChunked_MultipleChunks(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+		GroupBys:        []string{"provider", "service"},
+		Metrics:         []string{"cost"},
+		PageSize:        100,
+	}
+
+	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+
+	// Mock responses for January and February chunks
+	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
+		return q.StartAt.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) &&
+			q.EndAt.Equal(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC))
+	})).Return(client.Page{
+		Data:       []client.CostRow{},
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
+		return q.StartAt.Equal(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)) &&
+			q.EndAt.Equal(time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC))
+	})).Return(client.Page{
+		Data:       []client.CostRow{},
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	mockSink.On("WriteRecords", mock.Anything, mock.Anything).Return(nil)
+
+	err := adapter.syncChunked(context.Background(), cfg, mockSink, startDate, endDate)
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockSink.AssertExpectations(t)
+}
+
+func TestAdapter_SyncForecast(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+		GroupBys:        []string{"provider", "service"},
+		Metrics:         []string{"cost"},
+		PageSize:        100,
+	}
+
+	startDate := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC)
+
+	forecastData := []client.ForecastRow{
+		{
+			BucketStart: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+			BucketEnd:   time.Date(2024, 2, 2, 0, 0, 0, 0, time.UTC),
+			Cost:        100.50,
+			Currency:    "USD",
+		},
+	}
+
+	mockClient.On("Forecast", mock.Anything, "cr_test", mock.AnythingOfType("client.ForecastQuery")).Return(client.Forecast{
+		Data: forecastData,
+	}, nil)
+
+	mockSink.On("WriteRecords", mock.Anything, mock.MatchedBy(func(records []CostRecord) bool {
+		return len(records) == 1 && *records[0].NetCost == 100.50
+	})).Return(nil)
+
+	err := adapter.syncForecast(context.Background(), cfg, mockSink, startDate, endDate, "query_hash")
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockSink.AssertExpectations(t)
+}
+
+func TestAdapter_SyncForecast_Error(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+	}
+
+	startDate := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC)
+
+	mockClient.On("Forecast", mock.Anything, "cr_test", mock.AnythingOfType("client.ForecastQuery")).Return(client.Forecast{}, fmt.Errorf("forecast error"))
+
+	err := adapter.syncForecast(context.Background(), cfg, mockSink, startDate, endDate, "query_hash")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetching forecast")
+	mockClient.AssertExpectations(t)
+}
+
+func TestAdapter_SyncSingleRange_WithData(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+		GroupBys:        []string{"provider", "service"},
+		Metrics:         []string{"cost"},
+		PageSize:        100,
+	}
+
+	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	costData := []client.CostRow{
+		{
+			BucketStart:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			BucketEnd:     time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			Provider:      "aws",
+			Service:       "ec2",
+			Cost:          50.25,
+			Currency:      "USD",
+			UsageUnit:     "Hrs",
+			UsageQuantity: 24.0,
+		},
+	}
+
+	mockClient.On("Costs", mock.Anything, mock.AnythingOfType("client.Query")).Return(client.Page{
+		Data:       costData,
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	mockSink.On("WriteRecords", mock.Anything, mock.MatchedBy(func(records []CostRecord) bool {
+		return len(records) == 1 && *records[0].NetCost == 50.25
+	})).Return(nil)
+
+	err := adapter.syncSingleRange(context.Background(), cfg, mockSink, startDate, endDate, true)
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockSink.AssertExpectations(t)
+}
+
+func TestAdapter_SyncSingleRange_Pagination(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+		GroupBys:        []string{"provider", "service"},
+		Metrics:         []string{"cost"},
+		PageSize:        1, // Force pagination
+	}
+
+	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	costData1 := []client.CostRow{
+		{
+			BucketStart: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			BucketEnd:   time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			Provider:    "aws",
+			Service:     "ec2",
+			Cost:        50.25,
+			Currency:    "USD",
+		},
+	}
+
+	costData2 := []client.CostRow{
+		{
+			BucketStart: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			BucketEnd:   time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			Provider:    "aws",
+			Service:     "s3",
+			Cost:        25.75,
+			Currency:    "USD",
+		},
+	}
+
+	// Mock first page
+	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
+		return q.Cursor == ""
+	})).Return(client.Page{
+		Data:       costData1,
+		NextCursor: "cursor1",
+		HasMore:    true,
+	}, nil)
+
+	// Mock second page
+	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
+		return q.Cursor == "cursor1"
+	})).Return(client.Page{
+		Data:       costData2,
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	// Expect one call to WriteRecords with all records combined
+	mockSink.On("WriteRecords", mock.Anything, mock.MatchedBy(func(records []CostRecord) bool {
+		return len(records) == 2 && *records[0].NetCost == 50.25 && *records[1].NetCost == 25.75
+	})).Return(nil)
+
+	err := adapter.syncSingleRange(context.Background(), cfg, mockSink, startDate, endDate, true)
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockSink.AssertExpectations(t)
+}
+
+func TestAdapter_SyncSingleRange_Error(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+	}
+
+	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	mockClient.On("Costs", mock.Anything, mock.AnythingOfType("client.Query")).Return(client.Page{}, fmt.Errorf("costs error"))
+
+	err := adapter.syncSingleRange(context.Background(), cfg, mockSink, startDate, endDate, true)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetching costs")
+	mockClient.AssertExpectations(t)
+}
+
+func TestAdapter_SyncDateRange_BackfillChunking(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+		GroupBys:        []string{"provider", "service"},
+		Metrics:         []string{"cost"},
+		PageSize:        100,
+	}
+
+	// Date range > 30 days to trigger chunking
+	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC) // 60 days
+
+	// Mock responses for January and February chunks
+	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
+		return q.StartAt.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) &&
+			q.EndAt.Equal(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC))
+	})).Return(client.Page{
+		Data:       []client.CostRow{},
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
+		return q.StartAt.Equal(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)) &&
+			q.EndAt.Equal(time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC))
+	})).Return(client.Page{
+		Data:       []client.CostRow{},
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	mockSink.On("WriteRecords", mock.Anything, mock.Anything).Return(nil)
+
+	err := adapter.syncDateRange(context.Background(), cfg, mockSink, startDate, endDate, true)
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockSink.AssertExpectations(t)
+}
+
+func TestAdapter_SyncDateRange_SingleRange(t *testing.T) {
+	mockClient := &mockClient{}
+	mockSink := &mockSink{}
+
+	logger := client.NewNoopLogger()
+	adapter := New(mockClient, logger)
+
+	cfg := Config{
+		CostReportToken: "cr_test",
+		Granularity:     "day",
+		GroupBys:        []string{"provider", "service"},
+		Metrics:         []string{"cost"},
+		PageSize:        100,
+	}
+
+	// Date range <= 30 days, should use single range
+	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+
+	mockClient.On("Costs", mock.Anything, mock.AnythingOfType("client.Query")).Return(client.Page{
+		Data:       []client.CostRow{},
+		NextCursor: "",
+		HasMore:    false,
+	}, nil)
+
+	mockSink.On("WriteRecords", mock.Anything, mock.Anything).Return(nil)
+
+	err := adapter.syncDateRange(context.Background(), cfg, mockSink, startDate, endDate, true)
+
+	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockSink.AssertExpectations(t)
+}
+
 func TestDiagnostics(t *testing.T) {
 	diag := NewDiagnostics()
 
@@ -312,7 +685,7 @@ func TestDiagnostics(t *testing.T) {
 	diag.AddWarning("negative_cost")
 	diag.AddWarning("missing_unit")
 
-	// Test source info
+	// Test source info - this should trigger the nil initialization branch
 	diag.SetSourceInfo("api_version", "v1")
 	diag.SetSourceInfo("record_count", 100)
 
@@ -321,4 +694,9 @@ func TestDiagnostics(t *testing.T) {
 	assert.Len(t, diag.Warnings, 2)
 	assert.Equal(t, "v1", diag.SourceInfo["api_version"])
 	assert.Equal(t, 100, diag.SourceInfo["record_count"])
+
+	// Test SetSourceInfo on nil map (separate diagnostics instance)
+	diag2 := &Diagnostics{}
+	diag2.SetSourceInfo("test_key", "test_value")
+	assert.Equal(t, "test_value", diag2.SourceInfo["test_key"])
 }
