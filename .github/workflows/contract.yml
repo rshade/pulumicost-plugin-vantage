@@ -53,7 +53,7 @@ jobs:
 
       - name: Archive Wiremock logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wiremock-logs
           path: |
