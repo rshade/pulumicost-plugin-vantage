@@ -19,7 +19,7 @@ import (
 
 func checkWiremockRunning(t *testing.T) {
 	// Check if Wiremock is running
-	resp, err := http.Get("http://localhost:8080/__admin/mappings")
+	resp, err := http.Get("http://localhost:8080/__admin/health")
 	if err != nil {
 		t.Skip("Wiremock server not running. Run 'make wiremock-up' first.")
 	}

@@ -41,6 +41,7 @@ type CostRecord struct {
 	Currency          string `json:"currency,omitempty"`
 	SourceReportToken string `json:"source_report_token,omitempty"`
 	QueryHash         string `json:"query_hash"`
+	LineItemID        string `json:"line_item_id"` // FOCUS 1.2 idempotency key (report_token, date, dimensions, metrics hash)
 	MetricType        string `json:"metric_type,omitempty"` // "cost" or "forecast"
 
 	// Diagnostics

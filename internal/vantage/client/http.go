@@ -160,11 +160,7 @@ func (c *httpClient) doCostsRequestOnce(ctx context.Context, query Query) (Page,
 		return Page{}, fmt.Errorf("decoding response: %w", err)
 	}
 
-	page := Page{
-		Data:       costsResp.Data,
-		NextCursor: costsResp.NextCursor,
-		HasMore:    costsResp.HasMore,
-	}
+	page := Page(costsResp)
 
 	c.logger.Debug(ctx, "Costs response received", map[string]interface{}{
 		"rows":        len(page.Data),
@@ -275,9 +271,7 @@ func (c *httpClient) doForecastRequestOnce(ctx context.Context, reportToken stri
 		return Forecast{}, fmt.Errorf("decoding response: %w", err)
 	}
 
-	forecast := Forecast{
-		Data: forecastResp.Data,
-	}
+	forecast := Forecast(forecastResp)
 
 	c.logger.Debug(ctx, "Forecast response received", map[string]interface{}{
 		"rows": len(forecast.Data),

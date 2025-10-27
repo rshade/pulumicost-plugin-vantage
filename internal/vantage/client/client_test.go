@@ -343,7 +343,9 @@ func TestPager_AllPages(t *testing.T) {
 				NextCursor: "cursor-2",
 				HasMore:    true,
 			}
-			json.NewEncoder(w).Encode(resp)
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("failed to encode response: %v", err)
+			}
 		} else {
 			// Second page (final)
 			resp := CostsResponse{
@@ -353,7 +355,9 @@ func TestPager_AllPages(t *testing.T) {
 				NextCursor: "",
 				HasMore:    false,
 			}
-			json.NewEncoder(w).Encode(resp)
+			if err := json.NewEncoder(w).Encode(resp); err != nil {
+				t.Fatalf("failed to encode response: %v", err)
+			}
 		}
 	}))
 	defer server.Close()
@@ -396,7 +400,9 @@ func TestClient_ForecastRetry(t *testing.T) {
 		}
 		// Second call succeeds
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ForecastResponse{Data: []ForecastRow{}})
+		if err := json.NewEncoder(w).Encode(ForecastResponse{Data: []ForecastRow{}}); err != nil {
+			t.Fatalf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
