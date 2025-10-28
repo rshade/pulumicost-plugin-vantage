@@ -41,6 +41,7 @@ type CostRecord struct {
 	Currency          string `json:"currency,omitempty"`
 	SourceReportToken string `json:"source_report_token,omitempty"`
 	QueryHash         string `json:"query_hash"`
+	LineItemID        string `json:"line_item_id"`          // FOCUS 1.2 idempotency key (report_token, date, dimensions, metrics hash)
 	MetricType        string `json:"metric_type,omitempty"` // "cost" or "forecast"
 
 	// Diagnostics
@@ -77,8 +78,9 @@ func New(client client.Client, logger client.Logger) *Adapter {
 // Sync performs a cost data sync operation.
 func (a *Adapter) Sync(ctx context.Context, cfg Config, sink Sink) error {
 	a.logger.Info(ctx, "Starting Vantage adapter sync", map[string]interface{}{
+		"adapter":   "vantage",
 		"operation": "sync",
-		"source":    "vantage",
+		"attempt":   0,
 	})
 
 	// Determine sync mode based on configuration
@@ -98,6 +100,9 @@ func (a *Adapter) syncIncremental(ctx context.Context, cfg Config, sink Sink) er
 	endDate := now.AddDate(0, 0, -1)   // D-1
 
 	a.logger.Info(ctx, "Performing incremental sync", map[string]interface{}{
+		"adapter":    "vantage",
+		"operation":  "incremental_sync",
+		"attempt":    0,
 		"start_date": startDate.Format("2006-01-02"),
 		"end_date":   endDate.Format("2006-01-02"),
 	})
@@ -111,6 +116,9 @@ func (a *Adapter) syncBackfill(ctx context.Context, cfg Config, sink Sink) error
 	endDate := *cfg.EndDate
 
 	a.logger.Info(ctx, "Performing backfill sync", map[string]interface{}{
+		"adapter":    "vantage",
+		"operation":  "backfill_sync",
+		"attempt":    0,
 		"start_date": startDate.Format("2006-01-02"),
 		"end_date":   endDate.Format("2006-01-02"),
 	})
@@ -174,7 +182,10 @@ func (a *Adapter) syncSingleRange(ctx context.Context, cfg Config, sink Sink, st
 			if parsed, err := time.Parse(time.RFC3339, lastEndDate); err == nil {
 				query.StartAt = parsed
 				a.logger.Info(ctx, "Resuming from bookmark", map[string]interface{}{
-					"bookmark": lastEndDate,
+					"adapter":   "vantage",
+					"operation": "resume_bookmark",
+					"attempt":   0,
+					"bookmark":  lastEndDate,
 				})
 			}
 		}
@@ -204,6 +215,9 @@ func (a *Adapter) syncSingleRange(ctx context.Context, cfg Config, sink Sink, st
 	}
 
 	a.logger.Info(ctx, "Fetched cost data", map[string]interface{}{
+		"adapter":    "vantage",
+		"operation":  "fetch_cost_data",
+		"attempt":    0,
 		"pages":      pageCount,
 		"records":    len(allRecords),
 		"query_hash": queryHash,
@@ -219,7 +233,10 @@ func (a *Adapter) syncSingleRange(ctx context.Context, cfg Config, sink Sink, st
 		bookmarkValue := endDate.Format(time.RFC3339)
 		if err := sink.SetBookmark(ctx, bookmarkKey, bookmarkValue); err != nil {
 			a.logger.Warn(ctx, "Failed to update bookmark", map[string]interface{}{
-				"error": err,
+				"adapter":   "vantage",
+				"operation": "update_bookmark",
+				"attempt":   0,
+				"error":     err,
 			})
 		}
 	}
@@ -228,7 +245,10 @@ func (a *Adapter) syncSingleRange(ctx context.Context, cfg Config, sink Sink, st
 	if cfg.IncludeForecast && cfg.CostReportToken != "" {
 		if err := a.syncForecast(ctx, cfg, sink, startDate, endDate, queryHash); err != nil {
 			a.logger.Warn(ctx, "Forecast sync failed", map[string]interface{}{
-				"error": err,
+				"adapter":   "vantage",
+				"operation": "forecast_sync",
+				"attempt":   0,
+				"error":     err,
 			})
 		}
 	}
@@ -264,6 +284,9 @@ func (a *Adapter) syncForecast(ctx context.Context, cfg Config, sink Sink, start
 	}
 
 	a.logger.Info(ctx, "Fetched forecast data", map[string]interface{}{
+		"adapter":    "vantage",
+		"operation":  "fetch_forecast_data",
+		"attempt":    0,
 		"records":    len(forecastRecords),
 		"query_hash": queryHash,
 	})

@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
 
@@ -29,6 +30,69 @@ type Config struct {
 type rawConfig struct {
 	Credentials map[string]interface{} `yaml:"credentials"`
 	Params      map[string]interface{} `yaml:"params"`
+}
+
+// parseCredentials extracts token from raw config and applies env overrides
+func parseCredentials(raw *rawConfig) string {
+	var token string
+	if raw.Credentials != nil {
+		if t, ok := raw.Credentials["token"].(string); ok {
+			token = t
+		}
+	}
+	if envToken := os.Getenv("PULUMICOST_VANTAGE_TOKEN"); envToken != "" {
+		token = envToken
+	}
+	return token
+}
+
+// parseParams extracts params from raw config
+func parseParams(raw *rawConfig) (workspaceToken, costReportToken, granularityStr, startDateStr, endDateStr string, groupBys, metrics []string, includeForecast bool, pageSize, requestTimeoutSeconds, maxRetries int) {
+	if raw.Params == nil {
+		return
+	}
+	workspaceToken = cast.ToString(raw.Params["workspace_token"])
+	costReportToken = cast.ToString(raw.Params["cost_report_token"])
+	granularityStr = cast.ToString(raw.Params["granularity"])
+	startDateStr = cast.ToString(raw.Params["start_date"])
+	endDateStr = cast.ToString(raw.Params["end_date"])
+	groupBys = cast.ToStringSlice(raw.Params["group_bys"])
+	metrics = cast.ToStringSlice(raw.Params["metrics"])
+	includeForecast = cast.ToBool(raw.Params["include_forecast"])
+	pageSize = cast.ToInt(raw.Params["page_size"])
+	requestTimeoutSeconds = cast.ToInt(raw.Params["request_timeout_seconds"])
+	maxRetries = cast.ToInt(raw.Params["max_retries"])
+	return
+}
+
+// parseDates parses start and end dates with env overrides
+func parseDates(startDateStr, endDateStr string) (time.Time, *time.Time, error) {
+	var startDate time.Time
+	if envStartDate := os.Getenv("PULUMICOST_VANTAGE_START_DATE"); envStartDate != "" {
+		startDateStr = envStartDate
+	}
+	if startDateStr == "" {
+		startDate = time.Now().UTC().AddDate(-1, 0, 0)
+	} else {
+		var err error
+		startDate, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			return time.Time{}, nil, fmt.Errorf("invalid start_date format (expected YYYY-MM-DD): %s", startDateStr)
+		}
+	}
+
+	var endDate *time.Time
+	if envEndDate := os.Getenv("PULUMICOST_VANTAGE_END_DATE"); envEndDate != "" {
+		endDateStr = envEndDate
+	}
+	if endDateStr != "" {
+		parsed, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			return time.Time{}, nil, fmt.Errorf("invalid end_date format (expected YYYY-MM-DD): %s", endDateStr)
+		}
+		endDate = &parsed
+	}
+	return startDate, endDate, nil
 }
 
 // LoadConfig loads and parses the config from a YAML file, applying environment variable overrides.
@@ -57,95 +121,12 @@ func LoadConfig(filePath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse YAML config: %w", err)
 	}
 
-	// Extract credentials
-	var token string
-	if raw.Credentials != nil {
-		if t, ok := raw.Credentials["token"].(string); ok {
-			token = t
-		}
-	}
+	token := parseCredentials(&raw)
+	workspaceToken, costReportToken, granularityStr, startDateStr, endDateStr, groupBys, metrics, includeForecast, pageSize, requestTimeoutSeconds, maxRetries := parseParams(&raw)
 
-	// Apply environment variable override for token
-	if envToken := os.Getenv("PULUMICOST_VANTAGE_TOKEN"); envToken != "" {
-		token = envToken
-	}
-
-	// Extract params
-	var workspaceToken, costReportToken, granularityStr, startDateStr, endDateStr string
-	var groupBys, metrics []string
-	var includeForecast bool
-	var pageSize, requestTimeoutSeconds, maxRetries int
-
-	if raw.Params != nil {
-		if ws, ok := raw.Params["workspace_token"].(string); ok {
-			workspaceToken = ws
-		}
-		if cr, ok := raw.Params["cost_report_token"].(string); ok {
-			costReportToken = cr
-		}
-		if g, ok := raw.Params["granularity"].(string); ok {
-			granularityStr = g
-		}
-		if s, ok := raw.Params["start_date"].(string); ok {
-			startDateStr = s
-		}
-		if e, ok := raw.Params["end_date"].(string); ok {
-			endDateStr = e
-		}
-		if gb, ok := raw.Params["group_bys"].([]interface{}); ok {
-			for _, v := range gb {
-				if str, ok := v.(string); ok {
-					groupBys = append(groupBys, str)
-				}
-			}
-		}
-		if m, ok := raw.Params["metrics"].([]interface{}); ok {
-			for _, v := range m {
-				if str, ok := v.(string); ok {
-					metrics = append(metrics, str)
-				}
-			}
-		}
-		if inc, ok := raw.Params["include_forecast"].(bool); ok {
-			includeForecast = inc
-		}
-		if ps, ok := raw.Params["page_size"].(int); ok {
-			pageSize = ps
-		}
-		if rts, ok := raw.Params["request_timeout_seconds"].(int); ok {
-			requestTimeoutSeconds = rts
-		}
-		if mr, ok := raw.Params["max_retries"].(int); ok {
-			maxRetries = mr
-		}
-	}
-
-	// Parse dates with environment overrides
-	var startDate time.Time
-	if envStartDate := os.Getenv("PULUMICOST_VANTAGE_START_DATE"); envStartDate != "" {
-		startDateStr = envStartDate
-	}
-	if startDateStr == "" {
-		// Default: 12 months ago
-		startDate = time.Now().AddDate(-1, 0, 0)
-	} else {
-		var err error
-		startDate, err = time.Parse("2006-01-02", startDateStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid start_date format (expected YYYY-MM-DD): %s", startDateStr)
-		}
-	}
-
-	var endDate *time.Time
-	if envEndDate := os.Getenv("PULUMICOST_VANTAGE_END_DATE"); envEndDate != "" {
-		endDateStr = envEndDate
-	}
-	if endDateStr != "" {
-		parsed, err := time.Parse("2006-01-02", endDateStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid end_date format (expected YYYY-MM-DD): %s", endDateStr)
-		}
-		endDate = &parsed
+	startDate, endDate, err := parseDates(startDateStr, endDateStr)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build Config struct
@@ -259,13 +240,13 @@ func ValidateConfig(cfg *Config) error {
 
 	// Metrics validation
 	validMetrics := map[string]bool{
-		"cost":                  true,
-		"usage":                 true,
-		"effective_unit_price":  true,
-		"amortized_cost":        true,
-		"taxes":                 true,
-		"credits":               true,
-		"refunds":               true,
+		"cost":                 true,
+		"usage":                true,
+		"effective_unit_price": true,
+		"amortized_cost":       true,
+		"taxes":                true,
+		"credits":              true,
+		"refunds":              true,
 	}
 	for _, m := range cfg.Metrics {
 		if !validMetrics[m] {
@@ -275,4 +256,3 @@ func ValidateConfig(cfg *Config) error {
 
 	return nil
 }
-

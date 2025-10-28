@@ -7,6 +7,9 @@ import (
 
 // mapVantageRowToCostRecord converts a Vantage CostRow to a PulumiCost CostRecord.
 func (a *Adapter) mapVantageRowToCostRecord(row client.CostRow, query client.Query, queryHash, metricType string) CostRecord {
+	// Generate idempotency key for line_item_id (FOCUS 1.2 requirement)
+	lineItemID := GenerateLineItemID(query.CostReportToken, row, query.Metrics)
+
 	record := CostRecord{
 		Timestamp:         row.BucketStart,
 		Provider:          row.Provider,
@@ -18,6 +21,7 @@ func (a *Adapter) mapVantageRowToCostRecord(row client.CostRow, query client.Que
 		Currency:          row.Currency,
 		SourceReportToken: query.CostReportToken,
 		QueryHash:         queryHash,
+		LineItemID:        lineItemID,
 		MetricType:        metricType,
 		Diagnostics:       &Diagnostics{},
 	}
