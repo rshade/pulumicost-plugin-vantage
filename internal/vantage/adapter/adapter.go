@@ -4,6 +4,7 @@ package adapter
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,7 +15,7 @@ import (
 
 // CostRecord represents a cost record in PulumiCost's internal schema with FOCUS 1.2 fields.
 type CostRecord struct {
-	// Core dimensions
+	// Core dimensions.
 	Timestamp      time.Time         `json:"timestamp"`
 	Provider       string            `json:"provider,omitempty"`
 	Service        string            `json:"service,omitempty"`
@@ -25,11 +26,11 @@ type CostRecord struct {
 	ResourceID     string            `json:"resource_id,omitempty"`
 	Labels         map[string]string `json:"labels,omitempty"`
 
-	// Usage metrics
+	// Usage metrics.
 	UsageAmount *float64 `json:"usage_amount,omitempty"`
 	UsageUnit   string   `json:"usage_unit,omitempty"`
 
-	// Cost metrics
+	// Cost metrics.
 	ListCost      *float64 `json:"list_cost,omitempty"`
 	NetCost       *float64 `json:"net_cost,omitempty"`
 	AmortizedCost *float64 `json:"amortized_cost,omitempty"`
@@ -37,59 +38,74 @@ type CostRecord struct {
 	CreditAmount  *float64 `json:"credit_amount,omitempty"`
 	RefundAmount  *float64 `json:"refund_amount,omitempty"`
 
-	// Metadata
+	// Metadata.
 	Currency          string `json:"currency,omitempty"`
 	SourceReportToken string `json:"source_report_token,omitempty"`
 	QueryHash         string `json:"query_hash"`
 	LineItemID        string `json:"line_item_id"`          // FOCUS 1.2 idempotency key (report_token, date, dimensions, metrics hash)
 	MetricType        string `json:"metric_type,omitempty"` // "cost" or "forecast"
 
-	// Diagnostics
+	// Diagnostics.
 	Diagnostics *Diagnostics `json:"diagnostics,omitempty"`
 }
 
 // Sink defines the interface for persisting cost records.
 // This interface is assumed to exist in pulumicost-core.
 type Sink interface {
-	// WriteRecords writes cost records to the data store
+	// WriteRecords writes cost records to the data store.
 	WriteRecords(ctx context.Context, records []CostRecord) error
 
-	// GetBookmark retrieves the last successful sync bookmark
+	// GetBookmark retrieves the last successful sync bookmark.
 	GetBookmark(ctx context.Context, key string) (string, error)
 
-	// SetBookmark stores the last successful sync bookmark
+	// SetBookmark stores the last successful sync bookmark.
 	SetBookmark(ctx context.Context, key string, value string) error
 }
 
 // Adapter implements the Vantage adapter for PulumiCost.
 type Adapter struct {
-	client client.Client
-	logger client.Logger
+	client             client.Client
+	logger             client.Logger
+	diagnosticsSummary *DiagnosticsSummary
 }
 
 // New creates a new Vantage adapter.
 func New(client client.Client, logger client.Logger) *Adapter {
 	return &Adapter{
-		client: client,
-		logger: logger,
+		client:             client,
+		logger:             logger,
+		diagnosticsSummary: NewDiagnosticsSummary(),
 	}
+}
+
+// GetDiagnosticsSummary returns the aggregated diagnostics from the last sync operation.
+func (a *Adapter) GetDiagnosticsSummary() *DiagnosticsSummary {
+	return a.diagnosticsSummary
+}
+
+// ResetDiagnosticsSummary resets the diagnostics summary for a new sync operation.
+func (a *Adapter) ResetDiagnosticsSummary() {
+	a.diagnosticsSummary = NewDiagnosticsSummary()
 }
 
 // Sync performs a cost data sync operation.
 func (a *Adapter) Sync(ctx context.Context, cfg Config, sink Sink) error {
+	// Reset diagnostics summary for this sync operation.
+	a.ResetDiagnosticsSummary()
+
 	a.logger.Info(ctx, "Starting Vantage adapter sync", map[string]interface{}{
 		"adapter":   "vantage",
 		"operation": "sync",
 		"attempt":   0,
 	})
 
-	// Determine sync mode based on configuration
+	// Determine sync mode based on configuration.
 	if cfg.EndDate == nil {
-		// Incremental sync: D-3 to D-1
+		// Incremental sync: D-3 to D-1.
 		return a.syncIncremental(ctx, cfg, sink)
 	}
 
-	// Backfill sync: specified date range
+	// Backfill sync: specified date range.
 	return a.syncBackfill(ctx, cfg, sink)
 }
 
@@ -127,13 +143,19 @@ func (a *Adapter) syncBackfill(ctx context.Context, cfg Config, sink Sink) error
 }
 
 // syncDateRange syncs data for a specific date range.
-func (a *Adapter) syncDateRange(ctx context.Context, cfg Config, sink Sink, startDate, endDate time.Time, isBackfill bool) error {
-	// For backfill, chunk by month to limit payload size
+func (a *Adapter) syncDateRange(
+	ctx context.Context,
+	cfg Config,
+	sink Sink,
+	startDate, endDate time.Time,
+	isBackfill bool,
+) error {
+	// For backfill, chunk by month to limit payload size.
 	if isBackfill && endDate.Sub(startDate).Hours() > 24*30 {
 		return a.syncChunked(ctx, cfg, sink, startDate, endDate)
 	}
 
-	// Single range sync
+	// Single range sync.
 	return a.syncSingleRange(ctx, cfg, sink, startDate, endDate, isBackfill)
 }
 
@@ -148,7 +170,12 @@ func (a *Adapter) syncChunked(ctx context.Context, cfg Config, sink Sink, startD
 		}
 
 		if err := a.syncSingleRange(ctx, cfg, sink, current, chunkEnd, true); err != nil {
-			return fmt.Errorf("syncing chunk %s to %s: %w", current.Format("2006-01-02"), chunkEnd.Format("2006-01-02"), err)
+			return fmt.Errorf(
+				"syncing chunk %s to %s: %w",
+				current.Format("2006-01-02"),
+				chunkEnd.Format("2006-01-02"),
+				err,
+			)
 		}
 
 		current = chunkEnd
@@ -158,7 +185,13 @@ func (a *Adapter) syncChunked(ctx context.Context, cfg Config, sink Sink, startD
 }
 
 // syncSingleRange syncs a single date range.
-func (a *Adapter) syncSingleRange(ctx context.Context, cfg Config, sink Sink, startDate, endDate time.Time, isBackfill bool) error {
+func (a *Adapter) syncSingleRange(
+	ctx context.Context,
+	cfg Config,
+	sink Sink,
+	startDate, endDate time.Time,
+	isBackfill bool,
+) error {
 	query := client.Query{
 		WorkspaceToken:  cfg.WorkspaceToken,
 		CostReportToken: cfg.CostReportToken,
@@ -170,48 +203,17 @@ func (a *Adapter) syncSingleRange(ctx context.Context, cfg Config, sink Sink, st
 		PageSize:        cfg.PageSize,
 	}
 
-	// Generate idempotency key
+	// Generate idempotency key.
 	queryHash := a.generateQueryHash(query)
-
-	// Check bookmark for incremental sync
 	bookmarkKey := fmt.Sprintf("vantage_%s", queryHash)
-	if !isBackfill {
-		lastEndDate, err := sink.GetBookmark(ctx, bookmarkKey)
-		if err == nil && lastEndDate != "" {
-			// Resume from bookmark
-			if parsed, err := time.Parse(time.RFC3339, lastEndDate); err == nil {
-				query.StartAt = parsed
-				a.logger.Info(ctx, "Resuming from bookmark", map[string]interface{}{
-					"adapter":   "vantage",
-					"operation": "resume_bookmark",
-					"attempt":   0,
-					"bookmark":  lastEndDate,
-				})
-			}
-		}
-	}
 
-	pager := client.NewPager(a.client, query, a.logger)
+	// Apply bookmark for incremental sync.
+	a.applyBookmark(ctx, &query, sink, bookmarkKey, isBackfill)
 
-	var allRecords []CostRecord
-	pageCount := 0
-
-	for pager.HasMore() || pageCount == 0 {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return fmt.Errorf("fetching page: %w", err)
-		}
-
-		// Convert Vantage rows to CostRecords
-		for _, row := range page.Data {
-			record := a.mapVantageRowToCostRecord(row, query, queryHash, "cost")
-			allRecords = append(allRecords, record)
-		}
-
-		pageCount++
-		if !page.HasMore {
-			break
-		}
+	// Fetch and collect all records.
+	allRecords, pageCount, err := a.fetchAndCollectRecords(ctx, query, queryHash)
+	if err != nil {
+		return err
 	}
 
 	a.logger.Info(ctx, "Fetched cost data", map[string]interface{}{
@@ -223,41 +225,132 @@ func (a *Adapter) syncSingleRange(ctx context.Context, cfg Config, sink Sink, st
 		"query_hash": queryHash,
 	})
 
-	// Write records
-	if err := sink.WriteRecords(ctx, allRecords); err != nil {
+	// Write records.
+	if err = sink.WriteRecords(ctx, allRecords); err != nil {
 		return fmt.Errorf("writing records: %w", err)
 	}
 
-	// Update bookmark
-	if !isBackfill {
-		bookmarkValue := endDate.Format(time.RFC3339)
-		if err := sink.SetBookmark(ctx, bookmarkKey, bookmarkValue); err != nil {
-			a.logger.Warn(ctx, "Failed to update bookmark", map[string]interface{}{
-				"adapter":   "vantage",
-				"operation": "update_bookmark",
-				"attempt":   0,
-				"error":     err,
-			})
-		}
-	}
+	// Update bookmark for incremental sync.
+	a.updateBookmark(ctx, sink, bookmarkKey, endDate, isBackfill)
 
-	// Handle forecast if enabled
-	if cfg.IncludeForecast && cfg.CostReportToken != "" {
-		if err := a.syncForecast(ctx, cfg, sink, startDate, endDate, queryHash); err != nil {
-			a.logger.Warn(ctx, "Forecast sync failed", map[string]interface{}{
-				"adapter":   "vantage",
-				"operation": "forecast_sync",
-				"attempt":   0,
-				"error":     err,
-			})
-		}
-	}
+	// Handle forecast if enabled.
+	a.handleForecast(ctx, cfg, sink, startDate, endDate, queryHash)
 
 	return nil
 }
 
+// applyBookmark applies the last saved bookmark to resume from a previous sync.
+func (a *Adapter) applyBookmark(
+	ctx context.Context,
+	query *client.Query,
+	sink Sink,
+	bookmarkKey string,
+	isBackfill bool,
+) {
+	if isBackfill {
+		return
+	}
+
+	lastEndDate, err := sink.GetBookmark(ctx, bookmarkKey)
+	if err == nil && lastEndDate != "" {
+		if parsed, parseErr := time.Parse(time.RFC3339, lastEndDate); parseErr == nil {
+			query.StartAt = parsed
+			a.logger.Info(ctx, "Resuming from bookmark", map[string]interface{}{
+				"adapter":   "vantage",
+				"operation": "resume_bookmark",
+				"attempt":   0,
+				"bookmark":  lastEndDate,
+			})
+		}
+	}
+}
+
+// fetchAndCollectRecords fetches pages of data and collects them into records.
+func (a *Adapter) fetchAndCollectRecords(
+	ctx context.Context,
+	query client.Query,
+	queryHash string,
+) ([]CostRecord, int, error) {
+	pager := client.NewPager(a.client, query, a.logger)
+
+	var allRecords []CostRecord
+	pageCount := 0
+
+	for pager.HasMore() || pageCount == 0 {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, 0, fmt.Errorf("fetching page: %w", err)
+		}
+
+		// Convert Vantage rows to CostRecords.
+		for _, row := range page.Data {
+			record := a.mapVantageRowToCostRecord(row, query, queryHash, "cost")
+			allRecords = append(allRecords, record)
+			a.diagnosticsSummary.AddRecordDiagnostics(record.Diagnostics)
+		}
+
+		pageCount++
+		if !page.HasMore {
+			break
+		}
+	}
+
+	return allRecords, pageCount, nil
+}
+
+// updateBookmark saves the last end date for incremental syncs.
+func (a *Adapter) updateBookmark(
+	ctx context.Context,
+	sink Sink,
+	bookmarkKey string,
+	endDate time.Time,
+	isBackfill bool,
+) {
+	if isBackfill {
+		return
+	}
+
+	bookmarkValue := endDate.Format(time.RFC3339)
+	if err := sink.SetBookmark(ctx, bookmarkKey, bookmarkValue); err != nil {
+		a.logger.Warn(ctx, "Failed to update bookmark", map[string]interface{}{
+			"adapter":   "vantage",
+			"operation": "update_bookmark",
+			"attempt":   0,
+			"error":     err,
+		})
+	}
+}
+
+// handleForecast syncs forecast data if enabled.
+func (a *Adapter) handleForecast(
+	ctx context.Context,
+	cfg Config,
+	sink Sink,
+	startDate, endDate time.Time,
+	queryHash string,
+) {
+	if !cfg.IncludeForecast || cfg.CostReportToken == "" {
+		return
+	}
+
+	if err := a.syncForecast(ctx, cfg, sink, startDate, endDate, queryHash); err != nil {
+		a.logger.Warn(ctx, "Forecast sync failed", map[string]interface{}{
+			"adapter":   "vantage",
+			"operation": "forecast_sync",
+			"attempt":   0,
+			"error":     err,
+		})
+	}
+}
+
 // syncForecast syncs forecast data for the given date range.
-func (a *Adapter) syncForecast(ctx context.Context, cfg Config, sink Sink, startDate, endDate time.Time, queryHash string) error {
+func (a *Adapter) syncForecast(
+	ctx context.Context,
+	cfg Config,
+	sink Sink,
+	startDate, endDate time.Time,
+	queryHash string,
+) error {
 	forecastQuery := client.ForecastQuery{
 		StartAt:     startDate,
 		EndAt:       endDate,
@@ -281,6 +374,9 @@ func (a *Adapter) syncForecast(ctx context.Context, cfg Config, sink Sink, start
 			Granularity:     cfg.Granularity,
 		}, queryHash, "forecast")
 		forecastRecords = append(forecastRecords, record)
+
+		// Collect diagnostics for summary.
+		a.diagnosticsSummary.AddRecordDiagnostics(record.Diagnostics)
 	}
 
 	a.logger.Info(ctx, "Fetched forecast data", map[string]interface{}{
@@ -296,7 +392,7 @@ func (a *Adapter) syncForecast(ctx context.Context, cfg Config, sink Sink, start
 
 // generateQueryHash creates a stable hash for idempotency.
 func (a *Adapter) generateQueryHash(query client.Query) string {
-	// Create a stable string representation
+	// Create a stable string representation.
 	parts := []string{
 		query.WorkspaceToken,
 		query.CostReportToken,
@@ -305,7 +401,7 @@ func (a *Adapter) generateQueryHash(query client.Query) string {
 		query.Granularity,
 	}
 
-	// Sort groupbys and metrics for consistency
+	// Sort groupbys and metrics for consistency.
 	groupBys := make([]string, len(query.GroupBys))
 	copy(groupBys, query.GroupBys)
 	sort.Strings(groupBys)
@@ -316,7 +412,7 @@ func (a *Adapter) generateQueryHash(query client.Query) string {
 	sort.Strings(metrics)
 	parts = append(parts, strings.Join(metrics, ","))
 
-	// Generate hash
+	// Generate hash.
 	hash := sha256.Sum256([]byte(strings.Join(parts, "|")))
-	return fmt.Sprintf("%x", hash[:16]) // First 32 hex chars
+	return hex.EncodeToString(hash[:16]) // First 32 hex chars
 }

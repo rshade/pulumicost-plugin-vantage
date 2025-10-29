@@ -1,4 +1,3 @@
-// Package adapter provides configuration and mapping logic for the Vantage adapter.
 package adapter
 
 import (
@@ -12,7 +11,7 @@ import (
 )
 
 func TestLoadConfigHappyPath(t *testing.T) {
-	// Create a temporary config file
+	// Create a temporary config file.
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -44,24 +43,24 @@ params:
 	err := os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
-	// Load the config
+	// Load the config.
 	cfg, err := LoadConfig(configPath)
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
 
-	// Verify config values
+	// Verify config values.
 	assert.Equal(t, "test-token-123", cfg.Token)
 	assert.Equal(t, "cr_test123", cfg.CostReportToken)
-	assert.Equal(t, "", cfg.WorkspaceToken)
+	assert.Empty(t, cfg.WorkspaceToken)
 	assert.Equal(t, "day", cfg.Granularity)
 	assert.Equal(t, 5000, cfg.PageSize)
 	assert.Equal(t, 60*time.Second, cfg.Timeout)
 	assert.Equal(t, 5, cfg.MaxRetries)
-	assert.Equal(t, true, cfg.IncludeForecast)
-	assert.Equal(t, 3, len(cfg.GroupBys))
-	assert.Equal(t, 2, len(cfg.Metrics))
+	assert.True(t, cfg.IncludeForecast)
+	assert.Len(t, cfg.GroupBys, 3)
+	assert.Len(t, cfg.Metrics, 2)
 
-	// Check dates
+	// Check dates.
 	expectedStart, _ := time.Parse("2006-01-02", "2024-01-01")
 	assert.Equal(t, expectedStart, cfg.StartDate)
 
@@ -71,7 +70,7 @@ params:
 }
 
 func TestLoadConfigWithEnvironmentOverrides(t *testing.T) {
-	// Create a temporary config file
+	// Create a temporary config file.
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -90,16 +89,16 @@ params:
 	err := os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
-	// Set environment variables
+	// Set environment variables.
 	t.Setenv("PULUMICOST_VANTAGE_TOKEN", "env-token-override")
 	t.Setenv("PULUMICOST_VANTAGE_START_DATE", "2024-02-01")
 	t.Setenv("PULUMICOST_VANTAGE_END_DATE", "2024-11-01")
 
-	// Load the config
+	// Load the config.
 	cfg, err := LoadConfig(configPath)
 	require.NoError(t, err)
 
-	// Verify environment variables override file values
+	// Verify environment variables override file values.
 	assert.Equal(t, "env-token-override", cfg.Token)
 
 	expectedStart, _ := time.Parse("2006-01-02", "2024-02-01")
@@ -111,7 +110,7 @@ params:
 }
 
 func TestLoadConfigDefaultsForOptionalFields(t *testing.T) {
-	// Create a minimal config file
+	// Create a minimal config file.
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -129,42 +128,42 @@ params:
 	err := os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
-	// Load the config
+	// Load the config.
 	cfg, err := LoadConfig(configPath)
 	require.NoError(t, err)
 
-	// Verify defaults are applied
+	// Verify defaults are applied.
 	assert.Equal(t, 5000, cfg.PageSize)
 	assert.Equal(t, 60*time.Second, cfg.Timeout)
 	assert.Equal(t, 5, cfg.MaxRetries)
 	assert.Nil(t, cfg.EndDate)
 
-	// Start date should default to 12 months ago (approximate check)
+	// Start date should default to 12 months ago (approximate check).
 	now := time.Now()
 	expectedApproximateStart := now.AddDate(-1, 0, 0)
-	// Allow 1-day tolerance for timing differences
+	// Allow 1-day tolerance for timing differences.
 	assert.True(t, cfg.StartDate.After(expectedApproximateStart.AddDate(0, 0, -1)))
 	assert.True(t, cfg.StartDate.Before(expectedApproximateStart.AddDate(0, 0, 1)))
 }
 
-// Error case tests
+// Error case tests.
 
 func TestLoadConfigErrorMissingFile(t *testing.T) {
 	cfg, err := LoadConfig("/nonexistent/path/config.yaml")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, cfg)
 	assert.Contains(t, err.Error(), "config file not found")
 }
 
 func TestLoadConfigErrorEmptyPath(t *testing.T) {
 	cfg, err := LoadConfig("")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, cfg)
 	assert.Contains(t, err.Error(), "config file path cannot be empty")
 }
 
 func TestLoadConfigErrorInvalidYAML(t *testing.T) {
-	// Create a config file with invalid YAML
+	// Create a config file with invalid YAML.
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
@@ -178,7 +177,7 @@ credentials:
 	require.NoError(t, err)
 
 	cfg, err := LoadConfig(configPath)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, cfg)
 	assert.Contains(t, err.Error(), "failed to read config file")
 }
@@ -194,7 +193,7 @@ func TestValidateConfigErrorMissingToken(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "credentials.token is required")
 }
 
@@ -208,7 +207,7 @@ func TestValidateConfigErrorMissingTokenType(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "either workspace_token or cost_report_token must be specified")
 }
 
@@ -223,7 +222,7 @@ func TestValidateConfigErrorInvalidGranularity(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "granularity must be 'day' or 'month'")
 }
 
@@ -242,7 +241,7 @@ func TestValidateConfigErrorEndDateBeforeStartDate(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "end_date must not be before start_date")
 }
 
@@ -269,7 +268,7 @@ func TestValidateConfigErrorInvalidPageSize(t *testing.T) {
 			}
 
 			err := ValidateConfig(cfg)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.errMsg)
 		})
 	}
@@ -286,7 +285,7 @@ func TestValidateConfigErrorInvalidTimeout(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout must be at least 1 second")
 }
 
@@ -302,7 +301,7 @@ func TestValidateConfigErrorNegativeMaxRetries(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "max_retries cannot be negative")
 }
 
@@ -318,7 +317,7 @@ func TestValidateConfigErrorInvalidGroupBy(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid group_by value: invalid_groupby")
 }
 
@@ -334,7 +333,7 @@ func TestValidateConfigErrorInvalidMetric(t *testing.T) {
 	}
 
 	err := ValidateConfig(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid metric value: invalid_metric")
 }
 
@@ -361,7 +360,15 @@ func TestValidateConfigValidMetrics(t *testing.T) {
 		StartDate:       time.Now(),
 		PageSize:        5000,
 		Timeout:         60 * time.Second,
-		Metrics:         []string{"cost", "usage", "effective_unit_price", "amortized_cost", "taxes", "credits", "refunds"},
+		Metrics: []string{
+			"cost",
+			"usage",
+			"effective_unit_price",
+			"amortized_cost",
+			"taxes",
+			"credits",
+			"refunds",
+		},
 	}
 
 	err := ValidateConfig(cfg)
@@ -402,7 +409,7 @@ params:
 	require.NoError(t, err)
 
 	cfg, err := LoadConfig(configPath)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, cfg)
 	assert.Contains(t, err.Error(), "invalid start_date format")
 }
@@ -428,7 +435,7 @@ params:
 	require.NoError(t, err)
 
 	cfg, err := LoadConfig(configPath)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, cfg)
 	assert.Contains(t, err.Error(), "invalid end_date format")
 }

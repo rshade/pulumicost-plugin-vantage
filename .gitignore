@@ -52,7 +52,8 @@ test/wiremock/mappings/
 # Temp files
 *.tmp
 *.bak
-pulumicost-vantage
+/pulumicost-vantage
+/bin/pulumicost-vantage
 COMMIT_MESSAGE.md
 PR_MESSAGE.md
 Github_Development_Prompt.md

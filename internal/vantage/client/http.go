@@ -1,4 +1,3 @@
-// Package client provides HTTP client functionality for Vantage API
 package client
 
 import (
@@ -8,15 +7,24 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// httpClient handles low-level HTTP operations with retry and rate limiting
+const (
+	exponentialBase  = 2.0
+	jitterFraction   = 0.5
+	maxBackoffDelay  = 30 * time.Second
+	baseBackoffDelay = 1 * time.Second
+	jitterOffset     = 0.25
+)
+
+// httpClient handles low-level HTTP operations with retry and rate limiting.
 type httpClient struct {
 	baseURL    string
 	token      string
@@ -26,8 +34,8 @@ type httpClient struct {
 	httpClient *http.Client
 }
 
-// newHTTPClient creates a new HTTP client
-func newHTTPClient(config Config) (*httpClient, error) {
+// newHTTPClient creates a new HTTP client.
+func newHTTPClient(config Config) *httpClient {
 	return &httpClient{
 		baseURL:    strings.TrimSuffix(config.BaseURL, "/"),
 		token:      config.Token,
@@ -37,10 +45,10 @@ func newHTTPClient(config Config) (*httpClient, error) {
 		httpClient: &http.Client{
 			Timeout: config.Timeout,
 		},
-	}, nil
+	}
 }
 
-// doCostsRequest performs a costs API request with retry logic
+// doCostsRequest performs a costs API request with retry logic.
 func (c *httpClient) doCostsRequest(ctx context.Context, query Query) (Page, error) {
 	var lastErr error
 
@@ -68,28 +76,28 @@ func (c *httpClient) doCostsRequest(ctx context.Context, query Query) (Page, err
 
 		lastErr = err
 
-		// Check if we should retry
+		// Check if we should retry.
 		if !c.shouldRetry(err, attempt) {
 			break
 		}
 
-		// Wait before retrying
-		if err := c.waitBeforeRetry(ctx, attempt); err != nil {
-			return Page{}, err
+		// Wait before retrying.
+		if waitErr := c.waitBeforeRetry(ctx, attempt); waitErr != nil {
+			return Page{}, waitErr
 		}
 	}
 
 	return Page{}, fmt.Errorf("costs request failed after %d attempts: %w", c.maxRetries+1, lastErr)
 }
 
-// doCostsRequestOnce performs a single costs API request
+// doCostsRequestOnce performs a single costs API request.
 func (c *httpClient) doCostsRequestOnce(ctx context.Context, query Query) (Page, error) {
 	u, err := url.Parse(c.baseURL + "/costs")
 	if err != nil {
 		return Page{}, fmt.Errorf("parsing URL: %w", err)
 	}
 
-	// Build query parameters
+	// Build query parameters.
 	q := url.Values{}
 	if query.WorkspaceToken != "" {
 		q.Set("workspace_token", query.WorkspaceToken)
@@ -117,7 +125,7 @@ func (c *httpClient) doCostsRequestOnce(ctx context.Context, query Query) (Page,
 
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return Page{}, fmt.Errorf("creating request: %w", err)
 	}
@@ -142,8 +150,8 @@ func (c *httpClient) doCostsRequestOnce(ctx context.Context, query Query) (Page,
 		_ = resp.Body.Close()
 	}()
 
-	// Handle rate limiting
-	if resp.StatusCode == 429 {
+	// Handle rate limiting.
+	if resp.StatusCode == http.StatusTooManyRequests {
 		resetTime := c.parseRateLimitReset(ctx, resp)
 		if resetTime > 0 {
 			c.logger.Warn(ctx, "Rate limited, waiting for reset", map[string]interface{}{
@@ -169,8 +177,8 @@ func (c *httpClient) doCostsRequestOnce(ctx context.Context, query Query) (Page,
 	}
 
 	var costsResp CostsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&costsResp); err != nil {
-		return Page{}, fmt.Errorf("decoding response: %w", err)
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&costsResp); decodeErr != nil {
+		return Page{}, fmt.Errorf("decoding response: %w", decodeErr)
 	}
 
 	page := Page(costsResp)
@@ -187,7 +195,7 @@ func (c *httpClient) doCostsRequestOnce(ctx context.Context, query Query) (Page,
 	return page, nil
 }
 
-// doForecastRequest performs a forecast API request
+// doForecastRequest performs a forecast API request.
 func (c *httpClient) doForecastRequest(ctx context.Context, reportToken string, query ForecastQuery) (Forecast, error) {
 	var lastErr error
 
@@ -215,28 +223,32 @@ func (c *httpClient) doForecastRequest(ctx context.Context, reportToken string, 
 
 		lastErr = err
 
-		// Check if we should retry
+		// Check if we should retry.
 		if !c.shouldRetry(err, attempt) {
 			break
 		}
 
-		// Wait before retrying
-		if err := c.waitBeforeRetry(ctx, attempt); err != nil {
-			return Forecast{}, err
+		// Wait before retrying.
+		if waitErr := c.waitBeforeRetry(ctx, attempt); waitErr != nil {
+			return Forecast{}, waitErr
 		}
 	}
 
 	return Forecast{}, fmt.Errorf("forecast request failed after %d attempts: %w", c.maxRetries+1, lastErr)
 }
 
-// doForecastRequestOnce performs a single forecast API request
-func (c *httpClient) doForecastRequestOnce(ctx context.Context, reportToken string, query ForecastQuery) (Forecast, error) {
+// doForecastRequestOnce performs a single forecast API request.
+func (c *httpClient) doForecastRequestOnce(
+	ctx context.Context,
+	reportToken string,
+	query ForecastQuery,
+) (Forecast, error) {
 	u, err := url.Parse(fmt.Sprintf("%s/cost_reports/%s/forecast", c.baseURL, reportToken))
 	if err != nil {
 		return Forecast{}, fmt.Errorf("parsing URL: %w", err)
 	}
 
-	// Build query parameters
+	// Build query parameters.
 	q := url.Values{}
 	q.Set("start_at", query.StartAt.Format(time.RFC3339))
 	q.Set("end_at", query.EndAt.Format(time.RFC3339))
@@ -244,7 +256,7 @@ func (c *httpClient) doForecastRequestOnce(ctx context.Context, reportToken stri
 
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return Forecast{}, fmt.Errorf("creating request: %w", err)
 	}
@@ -269,8 +281,8 @@ func (c *httpClient) doForecastRequestOnce(ctx context.Context, reportToken stri
 		_ = resp.Body.Close()
 	}()
 
-	// Handle rate limiting
-	if resp.StatusCode == 429 {
+	// Handle rate limiting.
+	if resp.StatusCode == http.StatusTooManyRequests {
 		resetTime := c.parseRateLimitReset(ctx, resp)
 		if resetTime > 0 {
 			c.logger.Warn(ctx, "Rate limited, waiting for reset", map[string]interface{}{
@@ -296,8 +308,8 @@ func (c *httpClient) doForecastRequestOnce(ctx context.Context, reportToken stri
 	}
 
 	var forecastResp ForecastResponse
-	if err := json.NewDecoder(resp.Body).Decode(&forecastResp); err != nil {
-		return Forecast{}, fmt.Errorf("decoding response: %w", err)
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&forecastResp); decodeErr != nil {
+		return Forecast{}, fmt.Errorf("decoding response: %w", decodeErr)
 	}
 
 	forecast := Forecast(forecastResp)
@@ -312,7 +324,7 @@ func (c *httpClient) doForecastRequestOnce(ctx context.Context, reportToken stri
 	return forecast, nil
 }
 
-// shouldRetry determines if an error should trigger a retry
+// shouldRetry determines if an error should trigger a retry.
 func (c *httpClient) shouldRetry(err error, attempt int) bool {
 	if attempt >= c.maxRetries {
 		return false
@@ -323,7 +335,7 @@ func (c *httpClient) shouldRetry(err error, attempt int) bool {
 		return true
 	}
 
-	// Retry on 5xx errors and network errors
+	// Retry on 5xx errors and network errors.
 	errStr := err.Error()
 	return strings.Contains(errStr, "502") ||
 		strings.Contains(errStr, "503") ||
@@ -331,19 +343,19 @@ func (c *httpClient) shouldRetry(err error, attempt int) bool {
 		strings.Contains(errStr, "500")
 }
 
-// waitBeforeRetry implements exponential backoff with jitter
+// waitBeforeRetry implements exponential backoff with jitter.
 func (c *httpClient) waitBeforeRetry(ctx context.Context, attempt int) error {
-	// Exponential backoff: baseDelay * 2^attempt
-	baseDelay := time.Second
-	delay := time.Duration(float64(baseDelay) * math.Pow(2, float64(attempt)))
+	// Exponential backoff: baseDelay * exponentialBase^attempt.
+	delay := time.Duration(float64(baseBackoffDelay) * math.Pow(exponentialBase, float64(attempt)))
 
-	// Add jitter (±25%) as a fraction
-	jitterFrac := rand.Float64()*0.5 - 0.25 // -25% to +25%
+	// Add jitter (±25%) as a fraction.
+	//nolint:gosec // math/rand/v2 is acceptable for non-cryptographic jitter
+	jitterFrac := rand.Float64()*jitterFraction - jitterOffset
 	delay = time.Duration(float64(delay) * (1.0 + jitterFrac))
 
-	// Cap at 30 seconds
-	if delay > 30*time.Second {
-		delay = 30 * time.Second
+	// Cap at maxBackoffDelay.
+	if delay > maxBackoffDelay {
+		delay = maxBackoffDelay
 	}
 
 	c.logger.Debug(ctx, "Waiting before retry", map[string]interface{}{
@@ -361,8 +373,9 @@ func (c *httpClient) waitBeforeRetry(ctx context.Context, attempt int) error {
 	}
 }
 
-// parseRateLimitReset extracts reset time from rate limit headers
+// parseRateLimitReset extracts reset time from rate limit headers.
 func (c *httpClient) parseRateLimitReset(ctx context.Context, resp *http.Response) int64 {
+	//nolint:canonicalheader // Vantage API uses X-RateLimit-Reset (capital L)
 	resetStr := resp.Header.Get("X-RateLimit-Reset")
 	if resetStr == "" {
 		resetStr = resp.Header.Get("Retry-After")
@@ -386,16 +399,32 @@ func (c *httpClient) parseRateLimitReset(ctx context.Context, resp *http.Respons
 	return reset
 }
 
-// redactURL removes sensitive information from URLs for logging
+// redactURL removes sensitive information from URLs for logging.
 func (c *httpClient) redactURL(rawURL string) string {
 	// Redact Authorization header values in query parameters if present
 	if strings.Contains(rawURL, "Authorization=") {
-		return strings.ReplaceAll(rawURL, "Authorization=Bearer%20"+c.token, "Authorization=Bearer%20****")
+		rawURL = strings.ReplaceAll(rawURL, "Authorization=Bearer%20"+c.token, "Authorization=Bearer%20****")
 	}
+
+	// Redact workspace_token and cost_report_token query parameters
+	rawURL = redactQueryParam(rawURL, "workspace_token")
+	rawURL = redactQueryParam(rawURL, "cost_report_token")
+
+	// Redact reportToken in URL path (e.g., /cost_reports/{reportToken}/forecast)
+	if c.token != "" && strings.Contains(rawURL, "/cost_reports/") {
+		rawURL = strings.ReplaceAll(rawURL, "/cost_reports/"+c.token+"/", "/cost_reports/****/")
+	}
+
 	return rawURL
 }
 
-// rateLimitError represents a rate limiting error
+// redactQueryParam redacts a query parameter value from a URL.
+func redactQueryParam(rawURL, paramName string) string {
+	re := regexp.MustCompile("([?&])" + regexp.QuoteMeta(paramName) + "=([^&]*)")
+	return re.ReplaceAllString(rawURL, "$1"+paramName+"=****")
+}
+
+// rateLimitError represents a rate limiting error.
 type rateLimitError struct {
 	resetIn time.Duration
 }

@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt clean wiremock-up wiremock-down demo help
+.PHONY: build test test-coverage lint fmt vet tidy verify clean wiremock-up wiremock-down demo help
 
 # Variables
 BINARY_NAME=pulumicost-vantage
@@ -17,6 +17,9 @@ help:
 	@echo "  make test-coverage      - Run tests and generate coverage report"
 	@echo "  make lint               - Run golangci-lint"
 	@echo "  make fmt                - Format code with gofmt and goimports"
+	@echo "  make vet                - Run go vet"
+	@echo "  make tidy               - Run go mod tidy and verify no changes"
+	@echo "  make verify             - Run all verification checks (fmt, vet, tidy)"
 	@echo "  make clean              - Remove built artifacts"
 	@echo "  make wiremock-up        - Start Wiremock mock server"
 	@echo "  make wiremock-down      - Stop Wiremock mock server"
@@ -42,10 +45,27 @@ lint:
 	@echo "Running golangci-lint..."
 	@golangci-lint run ./... --timeout=5m
 
+vet:
+	@echo "Running go vet..."
+	@go vet ./...
+
+tidy:
+	@echo "Checking go mod tidy..."
+	@go mod tidy
+	@if [ -n "$$(git diff --name-only)" ]; then \
+		echo "ERROR: go mod tidy resulted in changes:"; \
+		git diff; \
+		exit 1; \
+	fi
+	@echo "✅ go mod tidy check passed"
+
+verify: fmt vet tidy
+	@echo "✅ All verification checks passed"
+
 fmt:
 	@echo "Formatting code..."
 	@go fmt ./...
-	@goimports -w .
+	@command -v goimports > /dev/null 2>&1 && goimports -w . || echo "⚠️  goimports not found, skipping (golangci-lint will check)"
 
 clean:
 	@echo "Cleaning..."

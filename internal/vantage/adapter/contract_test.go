@@ -1,4 +1,3 @@
-// Package adapter provides contract tests for the Vantage adapter.
 package adapter
 
 import (
@@ -12,13 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 )
 
 func checkWiremockRunning(t *testing.T) {
-	// Check if Wiremock is running
+	// Check if Wiremock is running.
 	resp, err := http.Get("http://localhost:8080/__admin/health")
 	if err != nil {
 		t.Skip("Wiremock server not running. Run 'make wiremock-up' first.")
@@ -27,7 +27,7 @@ func checkWiremockRunning(t *testing.T) {
 		_ = resp.Body.Close()
 	}()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Skip("Wiremock server not responding correctly")
 	}
 }
@@ -47,7 +47,7 @@ func createTestClient(t *testing.T, baseURL string) client.Client {
 }
 
 func loadExpectedRecords(t *testing.T, filename string) []CostRecord {
-	// Get the directory of the test file
+	// Get the directory of the test file.
 	_, testFile, _, _ := runtime.Caller(0)
 	testDir := filepath.Dir(testFile)
 	contractsDir := filepath.Join(testDir, "..", "contracts")
@@ -70,16 +70,16 @@ func loadExpectedRecords(t *testing.T, filename string) []CostRecord {
 }
 
 func TestContract_CostsMapping(t *testing.T) {
-	// Check that Wiremock is running
+	// Check that Wiremock is running.
 	checkWiremockRunning(t)
 
-	// Create client pointing to Wiremock
+	// Create client pointing to Wiremock.
 	testClient := createTestClient(t, "http://localhost:8080")
 
-	// Create adapter
+	// Create adapter.
 	adapter := New(testClient, client.NewNoopLogger())
 
-	// Test query
+	// Test query.
 	query := client.Query{
 		CostReportToken: "cr_test_report",
 		StartAt:         time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -89,22 +89,22 @@ func TestContract_CostsMapping(t *testing.T) {
 		Metrics:         []string{"cost", "usage"},
 	}
 
-	// Fetch data
+	// Fetch data.
 	page, err := testClient.Costs(context.Background(), query)
 	require.NoError(t, err)
 
-	// Convert to CostRecords
+	// Convert to CostRecords.
 	var records []CostRecord
 	for _, row := range page.Data {
 		record := adapter.mapVantageRowToCostRecord(row, query, "test_query_hash", "cost")
 		records = append(records, record)
 	}
 
-	// Load expected results
+	// Load expected results.
 	expectedRecords := loadExpectedRecords(t, "expected_cost_records_page1.json")
 
-	// Compare
-	assert.Equal(t, len(expectedRecords), len(records), "Number of records should match")
+	// Compare.
+	assert.Len(t, records, len(expectedRecords), "Number of records should match")
 
 	for i, expected := range expectedRecords {
 		if i >= len(records) {
@@ -112,17 +112,23 @@ func TestContract_CostsMapping(t *testing.T) {
 		}
 		actual := records[i]
 
-		// Compare key fields
+		// Compare key fields.
 		assert.Equal(t, expected.Timestamp, actual.Timestamp, "Timestamp should match for record %d", i)
 		assert.Equal(t, expected.Provider, actual.Provider, "Provider should match for record %d", i)
 		assert.Equal(t, expected.Service, actual.Service, "Service should match for record %d", i)
 		assert.Equal(t, expected.NetCost, actual.NetCost, "NetCost should match for record %d", i)
 		assert.Equal(t, expected.Currency, actual.Currency, "Currency should match for record %d", i)
-		assert.Equal(t, expected.SourceReportToken, actual.SourceReportToken, "SourceReportToken should match for record %d", i)
+		assert.Equal(
+			t,
+			expected.SourceReportToken,
+			actual.SourceReportToken,
+			"SourceReportToken should match for record %d",
+			i,
+		)
 		assert.Equal(t, expected.QueryHash, actual.QueryHash, "QueryHash should match for record %d", i)
 		assert.Equal(t, expected.MetricType, actual.MetricType, "MetricType should match for record %d", i)
 
-		// Compare labels
+		// Compare labels.
 		if expected.Labels != nil || actual.Labels != nil {
 			assert.Equal(t, expected.Labels, actual.Labels, "Labels should match for record %d", i)
 		}
@@ -130,30 +136,30 @@ func TestContract_CostsMapping(t *testing.T) {
 }
 
 func TestContract_ForecastMapping(t *testing.T) {
-	// Check that Wiremock is running
+	// Check that Wiremock is running.
 	checkWiremockRunning(t)
 
-	// Create client pointing to Wiremock
+	// Create client pointing to Wiremock.
 	testClient := createTestClient(t, "http://localhost:8080")
 
-	// Create adapter
+	// Create adapter.
 	adapter := New(testClient, client.NewNoopLogger())
 
-	// Test forecast query
+	// Test forecast query.
 	forecastQuery := client.ForecastQuery{
 		StartAt:     time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 		EndAt:       time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC),
 		Granularity: "day",
 	}
 
-	// Fetch forecast data
+	// Fetch forecast data.
 	forecast, err := testClient.Forecast(context.Background(), "cr_test_report", forecastQuery)
 	require.NoError(t, err)
 
-	// Convert to CostRecords
+	// Convert to CostRecords.
 	var records []CostRecord
 	for _, row := range forecast.Data {
-		// Create a mock CostRow from ForecastRow for mapping
+		// Create a mock CostRow from ForecastRow for mapping.
 		costRow := client.CostRow{
 			BucketStart: row.BucketStart,
 			BucketEnd:   row.BucketEnd,
@@ -168,11 +174,11 @@ func TestContract_ForecastMapping(t *testing.T) {
 		records = append(records, record)
 	}
 
-	// Load expected results
+	// Load expected results.
 	expectedRecords := loadExpectedRecords(t, "expected_forecast_records.json")
 
-	// Compare
-	assert.Equal(t, len(expectedRecords), len(records), "Number of forecast records should match")
+	// Compare.
+	assert.Len(t, records, len(expectedRecords), "Number of forecast records should match")
 
 	for i, expected := range expectedRecords {
 		if i >= len(records) {
@@ -188,7 +194,7 @@ func TestContract_ForecastMapping(t *testing.T) {
 }
 
 func TestContract_Idempotency(t *testing.T) {
-	// Test that same inputs produce same query hashes
+	// Test that same inputs produce same query hashes.
 	adapter := New(nil, client.NewNoopLogger())
 
 	query1 := client.Query{
@@ -214,7 +220,7 @@ func TestContract_Idempotency(t *testing.T) {
 
 	assert.Equal(t, hash1, hash2, "Identical queries should produce identical hashes")
 
-	// Different query should produce different hash
+	// Different query should produce different hash.
 	query3 := query1
 	query3.GroupBys = []string{"provider", "region"}
 	hash3 := adapter.generateQueryHash(query3)
@@ -222,13 +228,13 @@ func TestContract_Idempotency(t *testing.T) {
 }
 
 func TestContract_Pagination(t *testing.T) {
-	// Check that Wiremock is running
+	// Check that Wiremock is running.
 	checkWiremockRunning(t)
 
-	// Create client pointing to Wiremock
+	// Create client pointing to Wiremock.
 	testClient := createTestClient(t, "http://localhost:8080")
 
-	// Test pagination
+	// Test pagination.
 	query := client.Query{
 		CostReportToken: "cr_test_report",
 		StartAt:         time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -240,23 +246,23 @@ func TestContract_Pagination(t *testing.T) {
 
 	pager := client.NewPager(testClient, query, client.NewNoopLogger())
 
-	// First page
+	// First page.
 	page1, err := pager.NextPage(context.Background())
 	require.NoError(t, err)
 	assert.True(t, page1.HasMore, "First page should indicate more pages available")
 	assert.Equal(t, "page2_cursor_abc123", page1.NextCursor, "First page should have correct cursor")
 	assert.Len(t, page1.Data, 2, "First page should have 2 records")
 
-	// Second page
+	// Second page.
 	page2, err := pager.NextPage(context.Background())
 	require.NoError(t, err)
 	assert.False(t, page2.HasMore, "Second page should indicate no more pages")
-	assert.Equal(t, "", page2.NextCursor, "Second page should have empty cursor")
+	assert.Empty(t, page2.NextCursor, "Second page should have empty cursor")
 	assert.Len(t, page2.Data, 1, "Second page should have 1 record")
 
-	// Third page should fail
+	// Third page should fail.
 	_, err = pager.NextPage(context.Background())
 	assert.Error(t, err, "Third page should not exist")
 }
 
-// Helper functions
+// Helper functions.

@@ -36,52 +36,52 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.3'
+          go-version: '1.24.7'
           cache: true
 
-       - name: Install OpenCode CLI
-         run: curl -fsSL https://opencode.ai/install | bash
-         env:
-           VERSION: 0.15.10
+      - name: Install OpenCode CLI
+        run: curl -fsSL https://opencode.ai/install | bash
+        env:
+          VERSION: 0.15.10
 
       - name: Checkout PR Branch
         run: gh pr checkout ${{ github.event.issue.number }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-       - name: Run OpenCode Review Fix
-         run: |
-           export XAI_API_KEY=${{ secrets.XAI_API_KEY }}
-           PROMPT_FILE="Github_Development_Prompt_Grok.md"
-           if [ -f "$PROMPT_FILE" ]; then
-             BASE_PROMPT=$(cat "$PROMPT_FILE")
-           else
-             BASE_PROMPT="You are Grok, an AI assistant specialized in GitHub repository management and development tooling."
-           fi
+      - name: Run OpenCode Review Fix
+        run: |
+          export XAI_API_KEY=${{ secrets.XAI_API_KEY }}
+          PROMPT_FILE="Github_Development_Prompt_Grok.md"
+          if [ -f "$PROMPT_FILE" ]; then
+            BASE_PROMPT=$(cat "$PROMPT_FILE")
+          else
+            BASE_PROMPT="You are Grok, an AI assistant specialized in GitHub repository management and development tooling."
+          fi
 
-           TASK_PROMPT="Fix all review issues in this PR systematically.
+          TASK_PROMPT="Fix all review issues in this PR systematically.
 
-           Protocol:
-           1. Use 'gh pr view ${{ github.event.issue.number }} --comments' to read all review comments
-           2. Use 'gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews' for structured data
-           3. Fix each issue one at a time with validation after each fix
-           4. Run 'go mod tidy && go build ./... && make fmt && make lint && make test' after each fix
-           5. Commit and push changes when all issues are resolved
+          Protocol:
+          1. Use 'gh pr view ${{ github.event.issue.number }} --comments' to read all review comments
+          2. Use 'gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}/reviews' for structured data
+          3. Fix each issue one at a time with validation after each fix
+          4. Run 'go mod tidy && go build ./... && make fmt && make lint && make test' after each fix
+          5. Commit and push changes when all issues are resolved
 
-           Requirements:
-           - Fix issues from CodeRabbit, OpenCode, and other reviewers
-           - Maintain or improve code coverage
-           - Follow Go best practices
-           - No new linting issues
+          Requirements:
+          - Fix issues from CodeRabbit, OpenCode, and other reviewers
+          - Maintain or improve code coverage
+          - Follow Go best practices
+          - No new linting issues
 
-           Current PR: #${{ github.event.issue.number }}
-           Repository: ${{ github.repository }}"
+          Current PR: #${{ github.event.issue.number }}
+          Repository: ${{ github.repository }}"
 
-           FULL_PROMPT="$BASE_PROMPT
+          FULL_PROMPT="$BASE_PROMPT
 
-           $TASK_PROMPT"
+          $TASK_PROMPT"
 
-           opencode run --model xai/grok-code-free "$FULL_PROMPT"
+          opencode run --model xai/grok-code-free "$FULL_PROMPT"
         env:
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -104,5 +104,5 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.3.1
+          version: v2.5.0
           args: --timeout=5m

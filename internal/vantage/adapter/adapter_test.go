@@ -1,21 +1,22 @@
-// Package adapter provides the Vantage adapter for PulumiCost.
 package adapter
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 )
 
-// mockSink implements the Sink interface for testing
+// mockSink implements the Sink interface for testing.
 type mockSink struct {
 	mock.Mock
+
 	records   []CostRecord
 	bookmarks map[string]string
 }
@@ -40,7 +41,7 @@ func (m *mockSink) SetBookmark(ctx context.Context, key string, value string) er
 	return args.Error(0)
 }
 
-// mockClient implements the client.Client interface for testing
+// mockClient implements the client.Client interface for testing.
 type mockClient struct {
 	mock.Mock
 }
@@ -50,7 +51,11 @@ func (m *mockClient) Costs(ctx context.Context, query client.Query) (client.Page
 	return args.Get(0).(client.Page), args.Error(1)
 }
 
-func (m *mockClient) Forecast(ctx context.Context, reportToken string, query client.ForecastQuery) (client.Forecast, error) {
+func (m *mockClient) Forecast(
+	ctx context.Context,
+	reportToken string,
+	query client.ForecastQuery,
+) (client.Forecast, error) {
 	args := m.Called(ctx, reportToken, query)
 	return args.Get(0).(client.Forecast), args.Error(1)
 }
@@ -103,24 +108,24 @@ func TestAdapter_mapVantageRowToCostRecord(t *testing.T) {
 	assert.Equal(t, "test-hash", record.QueryHash)
 	assert.Equal(t, "cost", record.MetricType)
 
-	// Check cost values
+	// Check cost values.
 	assert.NotNil(t, record.NetCost)
-	assert.Equal(t, 100.50, *record.NetCost)
+	assert.InEpsilon(t, 100.50, *record.NetCost, 0.01)
 	assert.NotNil(t, record.ListCost)
-	assert.Equal(t, 120.00, *record.ListCost)
+	assert.InEpsilon(t, 120.00, *record.ListCost, 0.01)
 	assert.NotNil(t, record.AmortizedCost)
-	assert.Equal(t, 95.00, *record.AmortizedCost)
+	assert.InEpsilon(t, 95.00, *record.AmortizedCost, 0.01)
 	assert.NotNil(t, record.TaxCost)
-	assert.Equal(t, 8.50, *record.TaxCost)
+	assert.InEpsilon(t, 8.50, *record.TaxCost, 0.01)
 	assert.NotNil(t, record.CreditAmount)
-	assert.Equal(t, 5.00, *record.CreditAmount)
+	assert.InEpsilon(t, 5.00, *record.CreditAmount, 0.01)
 
-	// Check usage
+	// Check usage.
 	assert.NotNil(t, record.UsageAmount)
-	assert.Equal(t, 720.0, *record.UsageAmount)
+	assert.InEpsilon(t, 720.0, *record.UsageAmount, 0.01)
 	assert.Equal(t, "hours", record.UsageUnit)
 
-	// Check normalized tags
+	// Check normalized tags.
 	expectedLabels := map[string]string{
 		"environment":      "production",
 		"team":             "backend",
@@ -128,7 +133,7 @@ func TestAdapter_mapVantageRowToCostRecord(t *testing.T) {
 	}
 	assert.Equal(t, expectedLabels, record.Labels)
 
-	// Check diagnostics (should be nil for complete data)
+	// Check diagnostics (should be nil for complete data).
 	assert.Nil(t, record.Diagnostics)
 }
 
@@ -137,7 +142,7 @@ func TestAdapter_mapVantageRowToCostRecord_WithMissingFields(t *testing.T) {
 	adapter := New(&mockClient{}, logger)
 
 	row := client.CostRow{
-		// Missing provider and service
+		// Missing provider and service.
 		Cost:        0, // Zero cost
 		BucketStart: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 		BucketEnd:   time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
@@ -149,11 +154,14 @@ func TestAdapter_mapVantageRowToCostRecord_WithMissingFields(t *testing.T) {
 
 	record := adapter.mapVantageRowToCostRecord(row, query, "test-hash", "cost")
 
-	// Check that diagnostics are present
+	// Check that diagnostics are present.
 	assert.NotNil(t, record.Diagnostics)
 	assert.Contains(t, record.Diagnostics.MissingFields, "provider")
 	assert.Contains(t, record.Diagnostics.MissingFields, "service")
 	assert.Contains(t, record.Diagnostics.MissingFields, "net_cost")
+	assert.Equal(t, "required field is empty", record.Diagnostics.MissingFields["provider"])
+	assert.Equal(t, "required field is empty", record.Diagnostics.MissingFields["service"])
+	assert.Equal(t, "required field is nil or zero", record.Diagnostics.MissingFields["net_cost"])
 }
 
 func TestAdapter_generateQueryHash(t *testing.T) {
@@ -173,11 +181,11 @@ func TestAdapter_generateQueryHash(t *testing.T) {
 	hash1 := adapter.generateQueryHash(query)
 	hash2 := adapter.generateQueryHash(query)
 
-	// Hash should be deterministic
+	// Hash should be deterministic.
 	assert.Equal(t, hash1, hash2)
 	assert.NotEmpty(t, hash1)
 
-	// Different query should produce different hash
+	// Different query should produce different hash.
 	query2 := query
 	query2.GroupBys = []string{"provider", "region"}
 	hash3 := adapter.generateQueryHash(query2)
@@ -248,14 +256,14 @@ func TestAdapter_SyncIncremental(t *testing.T) {
 		PageSize:        100,
 	}
 
-	// Mock empty response
+	// Mock empty response.
 	mockClient.On("Costs", mock.Anything, mock.AnythingOfType("client.Query")).Return(client.Page{
 		Data:       []client.CostRow{},
 		NextCursor: "",
 		HasMore:    false,
 	}, nil)
 
-	// Mock sink operations
+	// Mock sink operations.
 	mockSink.On("GetBookmark", mock.Anything, mock.Anything).Return("", nil)
 	mockSink.On("WriteRecords", mock.Anything, mock.Anything).Return(nil)
 	mockSink.On("SetBookmark", mock.Anything, mock.Anything, mock.Anything).Return(nil)
@@ -285,14 +293,14 @@ func TestAdapter_SyncBackfill(t *testing.T) {
 		PageSize:        100,
 	}
 
-	// Mock empty response
+	// Mock empty response.
 	mockClient.On("Costs", mock.Anything, mock.AnythingOfType("client.Query")).Return(client.Page{
 		Data:       []client.CostRow{},
 		NextCursor: "",
 		HasMore:    false,
 	}, nil)
 
-	// Mock sink operations
+	// Mock sink operations.
 	mockSink.On("WriteRecords", mock.Anything, mock.Anything).Return(nil)
 
 	err := adapter.Sync(context.Background(), cfg, mockSink)
@@ -320,7 +328,7 @@ func TestAdapter_SyncChunked(t *testing.T) {
 	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
 
-	// Mock responses for each month chunk
+	// Mock responses for each month chunk.
 	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
 		return q.StartAt.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) &&
 			q.EndAt.Equal(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC))
@@ -357,7 +365,7 @@ func TestAdapter_SyncChunked_MultipleChunks(t *testing.T) {
 	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
 
-	// Mock responses for January and February chunks
+	// Mock responses for January and February chunks.
 	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
 		return q.StartAt.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) &&
 			q.EndAt.Equal(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC))
@@ -412,9 +420,10 @@ func TestAdapter_SyncForecast(t *testing.T) {
 		},
 	}
 
-	mockClient.On("Forecast", mock.Anything, "cr_test", mock.AnythingOfType("client.ForecastQuery")).Return(client.Forecast{
-		Data: forecastData,
-	}, nil)
+	mockClient.On("Forecast", mock.Anything, "cr_test", mock.AnythingOfType("client.ForecastQuery")).
+		Return(client.Forecast{
+			Data: forecastData,
+		}, nil)
 
 	mockSink.On("WriteRecords", mock.Anything, mock.MatchedBy(func(records []CostRecord) bool {
 		return len(records) == 1 && *records[0].NetCost == 100.50
@@ -442,7 +451,8 @@ func TestAdapter_SyncForecast_Error(t *testing.T) {
 	startDate := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC)
 
-	mockClient.On("Forecast", mock.Anything, "cr_test", mock.AnythingOfType("client.ForecastQuery")).Return(client.Forecast{}, fmt.Errorf("forecast error"))
+	mockClient.On("Forecast", mock.Anything, "cr_test", mock.AnythingOfType("client.ForecastQuery")).
+		Return(client.Forecast{}, errors.New("forecast error"))
 
 	err := adapter.syncForecast(context.Background(), cfg, mockSink, startDate, endDate, "query_hash")
 
@@ -539,7 +549,7 @@ func TestAdapter_SyncSingleRange_Pagination(t *testing.T) {
 		},
 	}
 
-	// Mock first page
+	// Mock first page.
 	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
 		return q.Cursor == ""
 	})).Return(client.Page{
@@ -548,7 +558,7 @@ func TestAdapter_SyncSingleRange_Pagination(t *testing.T) {
 		HasMore:    true,
 	}, nil)
 
-	// Mock second page
+	// Mock second page.
 	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
 		return q.Cursor == "cursor1"
 	})).Return(client.Page{
@@ -557,7 +567,7 @@ func TestAdapter_SyncSingleRange_Pagination(t *testing.T) {
 		HasMore:    false,
 	}, nil)
 
-	// Expect one call to WriteRecords with all records combined
+	// Expect one call to WriteRecords with all records combined.
 	mockSink.On("WriteRecords", mock.Anything, mock.MatchedBy(func(records []CostRecord) bool {
 		return len(records) == 2 && *records[0].NetCost == 50.25 && *records[1].NetCost == 25.75
 	})).Return(nil)
@@ -584,7 +594,8 @@ func TestAdapter_SyncSingleRange_Error(t *testing.T) {
 	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
 
-	mockClient.On("Costs", mock.Anything, mock.AnythingOfType("client.Query")).Return(client.Page{}, fmt.Errorf("costs error"))
+	mockClient.On("Costs", mock.Anything, mock.AnythingOfType("client.Query")).
+		Return(client.Page{}, errors.New("costs error"))
 
 	err := adapter.syncSingleRange(context.Background(), cfg, mockSink, startDate, endDate, true)
 
@@ -608,11 +619,11 @@ func TestAdapter_SyncDateRange_BackfillChunking(t *testing.T) {
 		PageSize:        100,
 	}
 
-	// Date range > 30 days to trigger chunking
+	// Date range > 30 days to trigger chunking.
 	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC) // 60 days
 
-	// Mock responses for January and February chunks
+	// Mock responses for January and February chunks.
 	mockClient.On("Costs", mock.Anything, mock.MatchedBy(func(q client.Query) bool {
 		return q.StartAt.Equal(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) &&
 			q.EndAt.Equal(time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC))
@@ -655,7 +666,7 @@ func TestAdapter_SyncDateRange_SingleRange(t *testing.T) {
 		PageSize:        100,
 	}
 
-	// Date range <= 30 days, should use single range
+	// Date range <= 30 days, should use single range.
 	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 
@@ -677,15 +688,15 @@ func TestAdapter_SyncDateRange_SingleRange(t *testing.T) {
 func TestDiagnostics(t *testing.T) {
 	diag := NewDiagnostics()
 
-	// Test adding missing fields
-	diag.AddMissingField("provider")
-	diag.AddMissingField("service")
+	// Test adding missing fields.
+	diag.AddMissingField("provider", "test reason 1")
+	diag.AddMissingField("service", "test reason 2")
 
-	// Test adding warnings
+	// Test adding warnings.
 	diag.AddWarning("negative_cost")
 	diag.AddWarning("missing_unit")
 
-	// Test source info - this should trigger the nil initialization branch
+	// Test source info - this should trigger the nil initialization branch.
 	diag.SetSourceInfo("api_version", "v1")
 	diag.SetSourceInfo("record_count", 100)
 
@@ -695,7 +706,7 @@ func TestDiagnostics(t *testing.T) {
 	assert.Equal(t, "v1", diag.SourceInfo["api_version"])
 	assert.Equal(t, 100, diag.SourceInfo["record_count"])
 
-	// Test SetSourceInfo on nil map (separate diagnostics instance)
+	// Test SetSourceInfo on nil map (separate diagnostics instance).
 	diag2 := &Diagnostics{}
 	diag2.SetSourceInfo("test_key", "test_value")
 	assert.Equal(t, "test_value", diag2.SourceInfo["test_key"])

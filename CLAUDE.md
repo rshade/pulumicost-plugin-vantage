@@ -19,14 +19,37 @@ contains the complete technical design.
 ```bash
 make build          # Build the binary
 make test           # Run all tests
+make test-coverage  # Run tests with coverage report
 make lint           # Run golangci-lint
 make fmt            # Format code with gofmt/goimports
+make vet            # Run go vet
+make tidy           # Verify go mod tidy doesn't change anything
+make verify         # Run fmt, vet, and tidy (used by CI)
 make wiremock-up    # Start mock server (for contract tests)
 make wiremock-down  # Stop mock server
 make demo           # Run pull against mocks and print records
 go test ./... -v    # Run tests with verbose output
 go test -run TestName  # Run single test
 ```
+
+**CI Integration**: CI workflows invoke Make targets exclusively - always update
+Makefile when adding validation steps, never add raw bash to CI workflows.
+
+## Module Dependencies
+
+**Plugin is Self-Contained**: This plugin has NO external dependencies on
+`pulumicost-core` or `pulumicost-spec`. It builds and tests independently.
+
+**Note on go.work**: The `go.work` file at `/mnt/c/GitHub/go/src/github.com/rshade/go.work`
+has been disabled (moved to `go.work.disabled`) since the plugin doesn't require it.
+Remote CI builds work fine without workspace files - this is by design.
+
+**Key Points**:
+
+- `go.mod` is clean and publishable (no local replace directives)
+- Binary builds successfully with `make build`
+- All tests pass without workspace file
+- Remote CI operates without any go.work dependency
 
 ## Code Style & Standards
 
@@ -45,6 +68,30 @@ go test -run TestName  # Run single test
 
 - Client package: ≥80% coverage
 - Overall: ≥70% coverage
+
+## Build Configuration
+
+**Version Embedding**: The plugin embeds version at build time:
+
+```go
+// cmd/pulumicost-vantage/main.go
+var version = "dev"
+```
+
+Makefile sets this via LDFLAGS:
+
+```makefile
+LDFLAGS=-ldflags "-X main.version=$(VERSION)"
+```
+
+**Important**: Unlike pulumicost-core, the plugin does NOT reference
+`github.com/rshade/pulumicost-core/pkg/version` - it's fully independent.
+
+**Cross-Platform Builds**: Always use `CGO_ENABLED=0` for static builds:
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" ...
+```
 
 ## Project Architecture
 
@@ -178,6 +225,60 @@ params:
 - Golden samples: `internal/vantage/contracts/`
 - Wiremock mappings: `test/wiremock/`
 
+## Code Quality & Linting
+
+**golangci-lint v2.5.0 Configuration**:
+
+- Uses strict defaults (no custom `.golangci.yml` file)
+- Runs all recommended linters with strict enforcement
+- **Zero issues allowed** - all code must pass without modification
+
+**Common Linting Fixes** (when issues arise):
+
+1. **Float Comparisons in Tests**: Use `assert.InEpsilon(t, expected, actual, 0.01)`
+   instead of `assert.Equal()` for floating-point assertions
+
+2. **Error Assertions**: Use `require.Error(t, err)` for mandatory error checks in
+   test setup, `assert.Error()` for optional checks
+
+3. **Magic Numbers**: Extract to named constants at package level:
+
+   ```go
+   const (
+       defaultTimeout = 60 * time.Second
+       defaultRetries = 5
+   )
+   ```
+
+4. **Global Variables**: Avoid globals; use factory functions instead:
+
+   ```go
+   func buildRootCmd() *cobra.Command { /* ... */ }
+   // Call in main(): cmd := buildRootCmd()
+   ```
+
+5. **Cognitive Complexity (>20)**: Extract helper methods:
+
+   ```go
+   func (a *Adapter) syncSingleRange(...) {
+       a.applyBookmark(...)      // extracted
+       records, err := a.fetchAndCollectRecords(...)  // extracted
+       a.updateBookmark(...)     // extracted
+   }
+   ```
+
+6. **Unused Returns**: Remove from signature if never used (unparam check)
+
+7. **Named Returns**: Remove from signature; declare variables in function body
+
+**Pre-commit Checklist**:
+
+```bash
+make lint   # Ensure zero issues
+make test   # All tests pass
+make build  # Binary builds successfully
+```
+
 ## API Endpoints Used
 
 - **GET /costs**: Query params include workspace/cost_report token, date
@@ -226,6 +327,27 @@ adapter/diagnostics.go)
 - **Least privilege**: Use cost_report token (scoped to single report)
   instead of workspace token when possible
 - **No secrets in commits**: `.env` and credential files are in `.gitignore`
+
+### AI Tool Security (opencode.json)
+
+The `opencode.json` configuration uses a whitelist model for bash command access:
+
+```json
+"permission": {
+  "bash": {
+    "git diff": "allow",
+    "git log": "allow",
+    "make lint": "allow",
+    "make test": "allow",
+    // ... 25+ specific commands listed
+    "*": "ask"  // All other commands require user approval
+  }
+}
+```
+
+**Key Principle**: Never use `"bash": true` (blanket access). Always enumerate
+allowed commands explicitly. The fallback `"*": "ask"` ensures visibility
+into any unapproved command attempts.
 
 ## References
 
@@ -519,49 +641,10 @@ Documentation files link to each other:
 in config
 **Commit validation fails**: Ensure message follows Conventional Commits
 format; check `commitlint.config.js`
+**Linting errors**: See "Code Quality & Linting" section above for common
+fixes; all 151 previous issues have been resolved
 **Issue not clear**: Read GitHub issue body for acceptance criteria;
 reference corresponding prompt file; check design document section
 
 ---
 
-## Session Summary (October 23, 2024)
-
-### Completed Issues
-
-- **#5: Create CONFIG.md Documentation** ✓
-  - Comprehensive configuration reference
-  - All 12 config fields documented
-  - 7 real-world configuration patterns
-  - Security best practices
-
-- **#23: Create TROUBLESHOOTING.md** ✓
-  - 12 common issues with detailed solutions
-  - Verbose logging documentation
-  - Wiremock recording instructions
-
-- **#24: Create FORECAST.md** ✓
-  - Complete forecast data flow documentation
-  - 4 usage examples with SQL queries
-  - Snapshot retention and MAPE evaluation
-
-- **#26: Create CHANGELOG.md** ✓
-  - v0.1.0 release notes
-  - New features, limitations, upgrading guide
-  - Contributors and future roadmap
-
-### Key Learnings
-
-1. **Documentation Patterns**: Multi-section documentation works well with
-   issue-example pairs (Issue + Supporting Example)
-
-2. **Configuration Documentation**: Real-world patterns (7 distinct use cases)
-   are more valuable than abstract parameter descriptions
-
-3. **Troubleshooting Structure**: Problem-cause-solution structure scales well
-   beyond 10 issues when grouped by symptom categories
-
-4. **Markdown Linting**: Emphasis-as-heading (MD036) converts `**Bold**` to
-   proper `####` headings
-
-5. **Line Length**: Table documentation requires careful formatting to stay
-   within 80-character limits without losing readability

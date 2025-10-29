@@ -1,4 +1,3 @@
-// Package adapter provides the Vantage adapter for PulumiCost.
 package adapter
 
 import (
@@ -15,10 +14,10 @@ func (a *Adapter) normalizeTags(tags map[string]string) map[string]string {
 	normalized := make(map[string]string)
 
 	for key, value := range tags {
-		// Normalize key to lower-kebab-case
+		// Normalize key to lower-kebab-case.
 		normalizedKey := a.normalizeTagKey(key)
 
-		// Apply filters
+		// Apply filters.
 		if a.shouldIncludeTag(normalizedKey, value) {
 			normalized[normalizedKey] = value
 		}
@@ -29,19 +28,19 @@ func (a *Adapter) normalizeTags(tags map[string]string) map[string]string {
 
 // normalizeTagKey converts tag keys to lower-kebab-case.
 func (a *Adapter) normalizeTagKey(key string) string {
-	// Convert to lowercase
+	// Convert to lowercase.
 	key = strings.ToLower(key)
 
-	// Replace underscores and spaces with hyphens
+	// Replace underscores and spaces with hyphens.
 	key = strings.ReplaceAll(key, "_", "-")
 	key = strings.ReplaceAll(key, " ", "-")
 
-	// Remove consecutive hyphens
+	// Remove consecutive hyphens.
 	for strings.Contains(key, "--") {
 		key = strings.ReplaceAll(key, "--", "-")
 	}
 
-	// Trim hyphens from start and end
+	// Trim hyphens from start and end.
 	key = strings.Trim(key, "-")
 
 	return key
@@ -49,7 +48,7 @@ func (a *Adapter) normalizeTagKey(key string) string {
 
 // shouldIncludeTag determines if a tag should be included based on filters.
 func (a *Adapter) shouldIncludeTag(key, _ string) bool {
-	// Denylist high-cardinality patterns first
+	// Denylist high-cardinality patterns first.
 	denyPatterns := []*regexp.Regexp{
 		regexp.MustCompile(`.*pod.*uid.*`),      // Pod UIDs
 		regexp.MustCompile(`.*container.*id.*`), // Container IDs
@@ -62,16 +61,16 @@ func (a *Adapter) shouldIncludeTag(key, _ string) bool {
 		}
 	}
 
-	// Default allowlist (can be made configurable)
+	// Default allowlist (can be made configurable).
 	allowPrefixes := []string{"user:", "kubernetes.io/"}
 
-	// Check allowlist
+	// Check allowlist.
 	for _, prefix := range allowPrefixes {
 		if strings.HasPrefix(key, prefix) {
 			return true
 		}
 	}
 
-	// Allow other tags by default
+	// Allow other tags by default.
 	return true
 }

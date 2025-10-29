@@ -22,55 +22,59 @@ jobs:
         with:
           fetch-depth: 1
 
-       - name: Install OpenCode
-         run: curl -fsSL https://opencode.ai/install | bash
-         env:
-           VERSION: 0.15.10
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
+        env:
+          VERSION: 0.15.10
 
       - name: Get PR Details
         id: pr-details
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           PR_BODY=$(gh pr view ${{ github.event.number }} --json body,title,files -q '.body + "\n\nTitle: " + .title + "\n\nFiles changed:\n" + (.files | map(.path) | join("\n"))')
           echo "pr_body<<EOF" >> $GITHUB_OUTPUT
           echo "$PR_BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-       - name: Run OpenCode Code Review
-         run: |
-           export XAI_API_KEY=${{ secrets.XAI_API_KEY }}
-           PROMPT_FILE="Github_Development_Prompt_Grok.md"
-           if [ -f "$PROMPT_FILE" ]; then
-             BASE_PROMPT=$(cat "$PROMPT_FILE")
-           else
-             BASE_PROMPT="You are Grok, an AI assistant specialized in GitHub repository management and development tooling."
-           fi
+      - name: Run OpenCode Code Review
+        run: |
+          export XAI_API_KEY=${{ secrets.XAI_API_KEY }}
+          PROMPT_FILE="Github_Development_Prompt_Grok.md"
+          if [ -f "$PROMPT_FILE" ]; then
+            BASE_PROMPT=$(cat "$PROMPT_FILE")
+          else
+            BASE_PROMPT="You are Grok, an AI assistant specialized in GitHub repository management and development tooling."
+          fi
 
-           TASK_PROMPT="Please review this pull request and provide feedback on:
-           - Code quality and best practices
-           - Potential bugs or issues
-           - Performance considerations
-           - Security concerns
-           - Test coverage
-           - **GitHub Actions workflow configuration issues** (invalid parameters, missing permissions, syntax errors)
+          TASK_PROMPT="Please review this pull request and provide feedback on:
+          - Code quality and best practices
+          - Potential bugs or issues
+          - Performance considerations
+          - Security concerns
+          - Test coverage
+          - **GitHub Actions workflow configuration issues** (invalid parameters, missing permissions, syntax errors)
 
-           **IMPORTANT**: If this PR modifies any \`.github/workflows/*.yml\` files, pay special attention to:
-           - Valid action inputs and parameters (check against action documentation)
-           - Required permissions (especially \`id-token: write\` for OIDC)
-           - Workflow syntax and structure
-           - Environment variable passing and configuration
+          **IMPORTANT**: If this PR modifies any \`.github/workflows/*.yml\` files, pay special attention to:
+          - Valid action inputs and parameters (check against action documentation)
+          - Required permissions (especially \`id-token: write\` for OIDC)
+          - Workflow syntax and structure
+          - Environment variable passing and configuration
 
-           Be constructive and helpful in your feedback.
+          Be constructive and helpful in your feedback.
 
-           PR Details:
-           ${{ steps.pr-details.outputs.pr_body }}"
+          PR Details:
+          ${{ steps.pr-details.outputs.pr_body }}"
 
-           FULL_PROMPT="$BASE_PROMPT
+          FULL_PROMPT="$BASE_PROMPT
 
-           $TASK_PROMPT"
+          $TASK_PROMPT"
 
-           opencode run --model xai/grok-code-free "$FULL_PROMPT" > review_output.txt
+          opencode run --model xai/grok-code-free "$FULL_PROMPT" > review_output.txt
 
       - name: Post Review Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           REVIEW=$(cat review_output.txt)
           gh pr comment ${{ github.event.number }} --body "$REVIEW"

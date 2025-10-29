@@ -1,4 +1,3 @@
-// Package adapter provides the Vantage adapter for PulumiCost.
 package adapter
 
 import (
@@ -6,8 +5,12 @@ import (
 )
 
 // mapVantageRowToCostRecord converts a Vantage CostRow to a PulumiCost CostRecord.
-func (a *Adapter) mapVantageRowToCostRecord(row client.CostRow, query client.Query, queryHash, metricType string) CostRecord {
-	// Generate idempotency key for line_item_id (FOCUS 1.2 requirement)
+func (a *Adapter) mapVantageRowToCostRecord(
+	row client.CostRow,
+	query client.Query,
+	queryHash, metricType string,
+) CostRecord {
+	// Generate idempotency key for line_item_id (FOCUS 1.2 requirement).
 	lineItemID := GenerateLineItemID(query.CostReportToken, row, query.Metrics)
 
 	record := CostRecord{
@@ -26,13 +29,13 @@ func (a *Adapter) mapVantageRowToCostRecord(row client.CostRow, query client.Que
 		Diagnostics:       &Diagnostics{},
 	}
 
-	// Map usage metrics
+	// Map usage metrics.
 	if row.UsageQuantity != 0 {
 		record.UsageAmount = &row.UsageQuantity
 	}
 	record.UsageUnit = row.UsageUnit
 
-	// Map cost metrics
+	// Map cost metrics.
 	if row.ListCost != 0 {
 		record.ListCost = &row.ListCost
 	}
@@ -52,10 +55,10 @@ func (a *Adapter) mapVantageRowToCostRecord(row client.CostRow, query client.Que
 		record.RefundAmount = &row.Refund
 	}
 
-	// Normalize and map tags
+	// Normalize and map tags.
 	record.Labels = a.normalizeTags(row.Tags)
 
-	// Add diagnostics for missing fields
+	// Add diagnostics for missing fields.
 	a.addDiagnostics(&record, row)
 
 	return record
@@ -65,29 +68,29 @@ func (a *Adapter) mapVantageRowToCostRecord(row client.CostRow, query client.Que
 func (a *Adapter) addDiagnostics(record *CostRecord, _ client.CostRow) {
 	diag := record.Diagnostics
 
-	// Check for missing required fields
+	// Check for missing required fields.
 	if record.Provider == "" {
-		diag.MissingFields = append(diag.MissingFields, "provider")
+		diag.AddMissingField("provider", "required field is empty")
 	}
 	if record.Service == "" {
-		diag.MissingFields = append(diag.MissingFields, "service")
+		diag.AddMissingField("service", "required field is empty")
 	}
 	if record.NetCost == nil || *record.NetCost == 0 {
-		diag.MissingFields = append(diag.MissingFields, "net_cost")
+		diag.AddMissingField("net_cost", "required field is nil or zero")
 	}
 
-	// Check for zero values that might indicate data issues
+	// Check for zero values that might indicate data issues.
 	if record.UsageAmount != nil && *record.UsageAmount == 0 && record.UsageUnit == "" {
 		diag.Warnings = append(diag.Warnings, "usage_amount_present_but_unit_missing")
 	}
 
-	// Check for unusual cost values
+	// Check for unusual cost values.
 	if record.NetCost != nil && *record.NetCost < 0 {
 		diag.Warnings = append(diag.Warnings, "negative_net_cost")
 	}
 
-	// If no diagnostics were added, set to nil
-	if len(diag.MissingFields) == 0 && len(diag.Warnings) == 0 {
+	// If no diagnostics were added, set to nil.
+	if !diag.HasIssues() {
 		record.Diagnostics = nil
 	}
 }
