@@ -35,13 +35,22 @@ go test -run TestName  # Run single test
 **CI Integration**: CI workflows invoke Make targets exclusively - always update
 Makefile when adding validation steps, never add raw bash to CI workflows.
 
+**GitHub Workflows & Docker Images**: See `.github/workflows/CLAUDE.md` for
+complete workflow documentation. **CRITICAL**: When using Docker images in
+GitHub Actions workflows, ALWAYS use specific version tags (e.g.,
+`wiremock/wiremock:3.13.1`) or major.x notation (e.g., `wiremock/wiremock:3x`).
+NEVER use major version only tags (e.g., `:3`) as they often don't exist on
+Docker Hub. The `validate-workflows.yml` automatically verifies all Docker
+images on PR changes.
+
 ## Module Dependencies
 
 **Plugin is Self-Contained**: This plugin has NO external dependencies on
 `pulumicost-core` or `pulumicost-spec`. It builds and tests independently.
 
-**Note on go.work**: The `go.work` file at `/mnt/c/GitHub/go/src/github.com/rshade/go.work`
-has been disabled (moved to `go.work.disabled`) since the plugin doesn't require it.
+**Note on go.work**: The `go.work` file at
+`/mnt/c/GitHub/go/src/github.com/rshade/go.work` has been disabled
+(moved to `go.work.disabled`) since the plugin doesn't require it.
 Remote CI builds work fine without workspace files - this is by design.
 
 **Key Points**:
@@ -647,4 +656,3 @@ fixes; all 151 previous issues have been resolved
 reference corresponding prompt file; check design document section
 
 ---
-

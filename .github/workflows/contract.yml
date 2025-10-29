@@ -16,7 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       wiremock:
-        image: wiremock/wiremock:3
+        # IMPORTANT: Always use specific version tags (e.g., 3.13.1), NOT
+        # major version tags (e.g., :3) which may not exist on Docker Hub.
+        # Verify tag exists at https://hub.docker.com/r/wiremock/wiremock/tags
+        # before updating.
+        image: wiremock/wiremock:3.13.1
         ports:
           - 8080:8080
         options: >-
@@ -24,8 +28,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        volumes:
-          - ${{ github.workspace }}/test/wiremock:/home/wiremock
 
     steps:
       - name: Checkout code
@@ -36,7 +38,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.24.7'
+          go-version: '1.24.9'
           cache: true
 
       - name: Wait for Wiremock to be ready

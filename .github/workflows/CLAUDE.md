@@ -193,6 +193,35 @@ gh auth status
 - ✅ **Standard**: `actions/checkout@v5`
 - **Special cases**: Use `fetch-depth: 0` only when git history is needed
 
+**Docker Images in Workflows**:
+
+- ⚠️ **CRITICAL**: Always use specific version tags, NEVER use major version
+  tags alone
+- ✅ **Correct**: `wiremock/wiremock:3.13.1` (specific version)
+- ✅ **Correct**: `wiremock/wiremock:3x` (major.x notation)
+- ❌ **WRONG**: `wiremock/wiremock:3` (major version only - may not exist!)
+- **Verification**: Check tag exists at Docker Hub before using:
+  `docker manifest inspect <image>:<tag>`
+- **Rationale**: Major version tags (like `:3`) often don't exist on Docker
+  Hub. Many images use `:3x` for major versions or require specific
+  versions like `:3.13.1`
+- **Automation**: The `validate-workflows.yml` workflow automatically checks
+  all Docker images in workflow files on every PR that touches workflows
+
+**Example - WireMock Service Configuration**:
+
+```yaml
+services:
+  wiremock:
+    # IMPORTANT: Always use specific version tags (e.g., 3.13.1), NOT
+    # major version tags (e.g., :3) which may not exist on Docker Hub.
+    # Verify tag exists at https://hub.docker.com/r/wiremock/wiremock/tags
+    # before updating.
+    image: wiremock/wiremock:3.13.1
+    ports:
+      - 8080:8080
+```
+
 ### Concurrency Control Patterns
 
 Always add concurrency control to prevent resource conflicts:

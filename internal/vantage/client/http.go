@@ -375,7 +375,6 @@ func (c *httpClient) waitBeforeRetry(ctx context.Context, attempt int) error {
 
 // parseRateLimitReset extracts reset time from rate limit headers.
 func (c *httpClient) parseRateLimitReset(ctx context.Context, resp *http.Response) int64 {
-	//nolint:canonicalheader // Vantage API uses X-RateLimit-Reset (capital L)
 	resetStr := resp.Header.Get("X-RateLimit-Reset")
 	if resetStr == "" {
 		resetStr = resp.Header.Get("Retry-After")
@@ -410,10 +409,9 @@ func (c *httpClient) redactURL(rawURL string) string {
 	rawURL = redactQueryParam(rawURL, "workspace_token")
 	rawURL = redactQueryParam(rawURL, "cost_report_token")
 
-	// Redact reportToken in URL path (e.g., /cost_reports/{reportToken}/forecast)
-	if c.token != "" && strings.Contains(rawURL, "/cost_reports/") {
-		rawURL = strings.ReplaceAll(rawURL, "/cost_reports/"+c.token+"/", "/cost_reports/****/")
-	}
+	// Redact any report token segment in cost_reports path.
+	rePath := regexp.MustCompile(`/cost_reports/[^/?#]+`)
+	rawURL = rePath.ReplaceAllString(rawURL, "/cost_reports/****")
 
 	return rawURL
 }

@@ -1,6 +1,6 @@
 module github.com/rshade/pulumicost-plugin-vantage
 
-go 1.24.7
+go 1.24.9
 
 require (
 	github.com/spf13/cast v1.10.0

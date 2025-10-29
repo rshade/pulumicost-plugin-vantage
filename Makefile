@@ -52,9 +52,9 @@ vet:
 tidy:
 	@echo "Checking go mod tidy..."
 	@go mod tidy
-	@if [ -n "$$(git diff --name-only)" ]; then \
+	@if [ -n "$$(git diff --name-only go.mod go.sum)" ]; then \
 		echo "ERROR: go mod tidy resulted in changes:"; \
-		git diff; \
+		git diff go.mod go.sum; \
 		exit 1; \
 	fi
 	@echo "✅ go mod tidy check passed"

@@ -443,6 +443,8 @@ linters:
       - text: 'comment on exported \S+ \S+ should be of the form ".+"'
         source: '// ?(nolint|TODO)'
         linters: [ revive, staticcheck ]
+      - text: 'non-canonical header "X-RateLimit-Reset"'
+        linters: [ canonicalheader ]
       - path: '_test\.go'
         linters:
           - bodyclose
