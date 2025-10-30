@@ -1,4 +1,3 @@
-// Package client provides HTTP client functionality for Vantage API
 package client
 
 import (
@@ -45,10 +44,10 @@ func TestNew(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := New(tt.config)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, client)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, client)
 			}
 		})
@@ -56,7 +55,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestClient_Costs(t *testing.T) {
-	// Mock server response
+	// Mock server response.
 	mockResponse := CostsResponse{
 		Data: []CostRow{
 			{
@@ -73,12 +72,12 @@ func TestClient_Costs(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request
+		// Verify request.
 		assert.Equal(t, "GET", r.Method)
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", r.Header.Get("Accept"))
 
-		// Check query parameters
+		// Check query parameters.
 		assert.Equal(t, "test-workspace", r.URL.Query().Get("workspace_token"))
 		assert.Equal(t, "day", r.URL.Query().Get("granularity"))
 		assert.Contains(t, r.URL.Query()["group_bys[]"], "provider")
@@ -114,13 +113,13 @@ func TestClient_Costs(t *testing.T) {
 	assert.Len(t, page.Data, 1)
 	assert.Equal(t, "aws", page.Data[0].Provider)
 	assert.Equal(t, "EC2", page.Data[0].Service)
-	assert.Equal(t, 100.50, page.Data[0].Cost)
+	assert.InEpsilon(t, 100.50, page.Data[0].Cost, 0.01)
 	assert.Equal(t, "next-page-cursor", page.NextCursor)
 	assert.True(t, page.HasMore)
 }
 
 func TestClient_Forecast(t *testing.T) {
-	// Mock server response
+	// Mock server response.
 	mockResponse := ForecastResponse{
 		Data: []ForecastRow{
 			{
@@ -133,7 +132,7 @@ func TestClient_Forecast(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request
+		// Verify request.
 		assert.Equal(t, "GET", r.Method)
 		assert.Equal(t, "/cost_reports/test-report-token/forecast", r.URL.Path)
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
@@ -162,7 +161,7 @@ func TestClient_Forecast(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, forecast.Data, 1)
-	assert.Equal(t, 150.75, forecast.Data[0].Cost)
+	assert.InEpsilon(t, 150.75, forecast.Data[0].Cost, 0.01)
 	assert.Equal(t, "USD", forecast.Data[0].Currency)
 }
 
@@ -171,11 +170,11 @@ func TestClient_RetryOn5xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		if callCount == 1 {
-			// First call fails with 503
+			// First call fails with 503.
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		// Second call succeeds
+		// Second call succeeds.
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
 	}))
@@ -204,7 +203,7 @@ func TestClient_RetryOn5xx(t *testing.T) {
 
 func TestClient_RateLimitHandling(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("X-RateLimit-Reset", "60") // Reset in 60 seconds
+		w.Header().Set("X-Ratelimit-Reset", "60") // Reset in 60 seconds
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer server.Close()
@@ -226,13 +225,13 @@ func TestClient_RateLimitHandling(t *testing.T) {
 	}
 
 	_, err = client.Costs(context.Background(), query)
-	assert.Error(t, err)
-	// Should be a rate limit error
+	require.Error(t, err)
+	// Should be a rate limit error.
 	assert.Contains(t, err.Error(), "rate limited")
 }
 
 func TestPager_NextPage(t *testing.T) {
-	// First page response
+	// First page response.
 	firstResponse := CostsResponse{
 		Data: []CostRow{
 			{Provider: "aws", Cost: 100},
@@ -241,7 +240,7 @@ func TestPager_NextPage(t *testing.T) {
 		HasMore:    true,
 	}
 
-	// Second page response
+	// Second page response.
 	secondResponse := CostsResponse{
 		Data: []CostRow{
 			{Provider: "gcp", Cost: 200},
@@ -279,7 +278,7 @@ func TestPager_NextPage(t *testing.T) {
 		Granularity:    "day",
 	}, NewNoopLogger())
 
-	// First page
+	// First page.
 	page1, err := pager.NextPage(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, page1.Data, 1)
@@ -287,12 +286,12 @@ func TestPager_NextPage(t *testing.T) {
 	assert.Equal(t, "cursor-2", page1.NextCursor)
 	assert.True(t, page1.HasMore)
 
-	// Second page
+	// Second page.
 	page2, err := pager.NextPage(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, page2.Data, 1)
 	assert.Equal(t, "gcp", page2.Data[0].Provider)
-	assert.Equal(t, "", page2.NextCursor)
+	assert.Empty(t, page2.NextCursor)
 	assert.False(t, page2.HasMore)
 
 	assert.Equal(t, 2, callCount)
@@ -318,24 +317,24 @@ func TestPager_HasMore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Test with empty cursor (should return false initially)
+	// Test with empty cursor (should return false initially).
 	pager := NewPager(client, Query{}, NewNoopLogger())
 	assert.False(t, pager.HasMore())
 
-	// Test with cursor (should return true)
+	// Test with cursor (should return true).
 	pager.query.Cursor = "test-cursor"
 	assert.True(t, pager.HasMore())
 }
 
 func TestPager_AllPages(t *testing.T) {
-	// Mock server response with multiple pages
+	// Mock server response with multiple pages.
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 
 		if callCount == 1 {
-			// First page
+			// First page.
 			resp := CostsResponse{
 				Data: []CostRow{
 					{Provider: "aws", Cost: 100},
@@ -347,7 +346,7 @@ func TestPager_AllPages(t *testing.T) {
 				t.Fatalf("failed to encode response: %v", err)
 			}
 		} else {
-			// Second page (final)
+			// Second page (final).
 			resp := CostsResponse{
 				Data: []CostRow{
 					{Provider: "gcp", Cost: 200},
@@ -383,9 +382,9 @@ func TestPager_AllPages(t *testing.T) {
 
 	assert.Len(t, rows, 2)
 	assert.Equal(t, "aws", rows[0].Provider)
-	assert.Equal(t, 100.0, rows[0].Cost)
+	assert.InEpsilon(t, 100.0, rows[0].Cost, 0.01)
 	assert.Equal(t, "gcp", rows[1].Provider)
-	assert.Equal(t, 200.0, rows[1].Cost)
+	assert.InEpsilon(t, 200.0, rows[1].Cost, 0.01)
 	assert.Equal(t, 2, callCount)
 }
 
@@ -394,11 +393,11 @@ func TestClient_ForecastRetry(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		if callCount == 1 {
-			// First call fails with 503
+			// First call fails with 503.
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		// Second call succeeds
+		// Second call succeeds.
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(ForecastResponse{Data: []ForecastRow{}}); err != nil {
 			t.Fatalf("failed to encode response: %v", err)
@@ -427,33 +426,35 @@ func TestClient_ForecastRetry(t *testing.T) {
 }
 
 func TestRedactURL(t *testing.T) {
-	// Create a test HTTP client directly
+	// Create a test HTTP client directly.
 	httpClient := &httpClient{
 		token:  "secret-token",
 		logger: NewNoopLogger(),
 	}
 
-	// Test URL without sensitive data
+	// Test URL without sensitive data.
 	originalURL := "https://api.vantage.sh/costs?param=value"
 	redacted := httpClient.redactURL(originalURL)
 	assert.Equal(t, originalURL, redacted)
 
-	// Test URL with Authorization parameter
+	// Test URL with Authorization parameter.
 	urlWithAuth := "https://api.vantage.sh/costs?Authorization=Bearer%20secret-token&param=value"
 	redacted = httpClient.redactURL(urlWithAuth)
 	expected := "https://api.vantage.sh/costs?Authorization=Bearer%20****&param=value"
 	assert.Equal(t, expected, redacted)
 }
 
-// Example usage demonstration
+// Example usage demonstration.
+//
+//nolint:testableexamples // Example requires real API credentials
 func ExampleNew() {
-	// Create a client with default configuration
+	// Create a client with default configuration.
 	client, err := New(DefaultConfig("your-api-token"))
 	if err != nil {
 		panic(err)
 	}
 
-	// Use the client to fetch costs
+	// Use the client to fetch costs.
 	query := Query{
 		CostReportToken: "cr_your_report_token",
 		StartAt:         time.Now().AddDate(0, -1, 0), // 1 month ago
@@ -468,19 +469,20 @@ func ExampleNew() {
 		panic(err)
 	}
 
-	// Process the results
+	// Process the results.
 	for _, row := range page.Data {
 		fmt.Printf("Provider: %s, Cost: %.2f\n", row.Provider, row.Cost)
 	}
 }
 
+//nolint:testableexamples // Example requires real API credentials
 func ExampleClient_Forecast() {
 	client, err := New(DefaultConfig("your-api-token"))
 	if err != nil {
 		panic(err)
 	}
 
-	// Fetch forecast data
+	// Fetch forecast data.
 	query := ForecastQuery{
 		StartAt:     time.Now(),
 		EndAt:       time.Now().AddDate(0, 3, 0), // 3 months ahead
@@ -492,7 +494,7 @@ func ExampleClient_Forecast() {
 		panic(err)
 	}
 
-	// Process forecast results
+	// Process forecast results.
 	for _, row := range forecast.Data {
 		fmt.Printf("Forecast cost: %.2f at %s\n", row.Cost, row.BucketStart.Format("2006-01-02"))
 	}

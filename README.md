@@ -1,11 +1,15 @@
 # PulumiCost Vantage Plugin
 
-A Go-based adapter that fetches normalized cost/usage data from Vantage's REST API and maps it into PulumiCost's internal schema with FinOps FOCUS 1.2 fields.
+A Go-based adapter that fetches normalized cost/usage data from Vantage's
+REST API and maps it into PulumiCost's internal schema with FinOps FOCUS
+1.2 fields.
 
 ## Features
 
-- Fetch costs via `/costs` endpoint using Cost Report tokens or Workspace tokens
-- Support for daily granularity with common dimension grouping (provider, service, account, project, region, resource_id, tags)
+- Fetch costs via `/costs` endpoint using Cost Report tokens or Workspace
+  tokens
+- Support for daily granularity with common dimension grouping (provider,
+  service, account, project, region, resource_id, tags)
 - Capture list, net, and amortized costs with taxes, credits, and refunds
 - Incremental sync with bookmarks and rate limit backoff
 - Forecast snapshot support
@@ -110,7 +114,7 @@ make wiremock-down
 
 ### Project Structure
 
-```
+```text
 cmd/pulumicost-vantage/        # CLI entry point
 internal/vantage/
   ├── client/                  # REST client

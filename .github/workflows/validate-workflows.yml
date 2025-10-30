@@ -1,0 +1,92 @@
+name: Validate Workflows
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-docker-images:
+    name: Validate Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Extract and validate Docker images
+        run: |
+          echo "Validating Docker images in workflow files..."
+
+          # Extract image references from workflow files (excluding this file to avoid self-reference)
+          images=$(find .github/workflows -name "*.yml" -not -name "validate-workflows.yml" -exec grep -h "image:" {} + | \
+                   grep -v "^#" | \
+                   sed 's/.*image: *//' | \
+                   sed 's/\s*#.*//' | \
+                   grep -v '^\$' | \
+                   grep -v '^[[:space:]]*$' | \
+                   sort -u)
+
+          if [ -z "$images" ]; then
+            echo "No Docker images found in workflows"
+            exit 0
+          fi
+
+          echo "Found Docker images:"
+          echo "$images"
+          echo ""
+
+          failed=0
+
+          while IFS= read -r image; do
+            # Skip empty lines or variable references
+            if [[ -z "$image" || "$image" == *"\$"* ]]; then
+              continue
+            fi
+
+            echo "Validating: $image"
+
+            # Try to pull the manifest (lightweight check)
+            if docker manifest inspect "$image" > /dev/null 2>&1; then
+              echo "✓ Valid: $image"
+            else
+              echo "✗ FAILED: Image '$image' does not exist or is not accessible"
+              failed=1
+            fi
+            echo ""
+          done <<< "$images"
+
+          if [ $failed -eq 1 ]; then
+            echo ""
+            echo "❌ One or more Docker images are invalid!"
+            echo ""
+            echo "Common issues:"
+            echo "  - Major version tags like ':3' may not exist (use ':3x' or specific version like ':3.13.1')"
+            echo "  - Verify tags at Docker Hub: https://hub.docker.com/"
+            echo "  - Use 'docker manifest inspect <image>' locally to test"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All Docker images are valid!"
+
+  validate-workflow-syntax:
+    name: Validate Workflow Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Validate workflow files with actionlint
+        run: |
+          # Install actionlint
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+
+          # Run actionlint on all workflow files
+          ./actionlint -color .github/workflows/*.yml

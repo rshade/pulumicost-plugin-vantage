@@ -1,12 +1,12 @@
-// Package client provides HTTP client functionality for Vantage API
 package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
-// Pager provides cursor-based pagination for cost queries
+// Pager provides cursor-based pagination for cost queries.
 type Pager struct {
 	client     Client
 	query      Query
@@ -14,7 +14,7 @@ type Pager struct {
 	hasStarted bool
 }
 
-// NewPager creates a new pager for the given query
+// NewPager creates a new pager for the given query.
 func NewPager(client Client, query Query, logger Logger) *Pager {
 	return &Pager{
 		client: client,
@@ -23,11 +23,11 @@ func NewPager(client Client, query Query, logger Logger) *Pager {
 	}
 }
 
-// NextPage fetches the next page of cost data
+// NextPage fetches the next page of cost data.
 func (p *Pager) NextPage(ctx context.Context) (Page, error) {
-	// If we've already started and there's no cursor, we've exhausted all pages
+	// If we've already started and there's no cursor, we've exhausted all pages.
 	if p.hasStarted && p.query.Cursor == "" {
-		return Page{}, fmt.Errorf("no more pages available")
+		return Page{}, errors.New("no more pages available")
 	}
 
 	currentQuery := p.query
@@ -44,7 +44,7 @@ func (p *Pager) NextPage(ctx context.Context) (Page, error) {
 		return Page{}, fmt.Errorf("fetching costs page: %w", err)
 	}
 
-	// Mark that we've started paging and update cursor for next page
+	// Mark that we've started paging and update cursor for next page.
 	p.hasStarted = true
 	p.query.Cursor = page.NextCursor
 
@@ -57,13 +57,13 @@ func (p *Pager) NextPage(ctx context.Context) (Page, error) {
 	return page, nil
 }
 
-// HasMore returns true if there are more pages to fetch
+// HasMore returns true if there are more pages to fetch.
 func (p *Pager) HasMore() bool {
 	return p.query.Cursor != ""
 }
 
-// AllPages fetches all pages and returns them as a single slice
-// Note: This can be memory-intensive for large datasets
+// AllPages fetches all pages and returns them as a single slice.
+// Note: This can be memory-intensive for large datasets.
 func (p *Pager) AllPages(ctx context.Context) ([]CostRow, error) {
 	var allRows []CostRow
 

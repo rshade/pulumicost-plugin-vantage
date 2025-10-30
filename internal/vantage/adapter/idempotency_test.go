@@ -1,4 +1,3 @@
-// Package adapter provides the Vantage adapter for PulumiCost.
 package adapter
 
 import (
@@ -10,7 +9,7 @@ import (
 	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 )
 
-// TestGenerateLineItemID_Determinism verifies that same inputs produce same ID
+// TestGenerateLineItemID_Determinism verifies that same inputs produce same ID.
 func TestGenerateLineItemID_Determinism(t *testing.T) {
 	row := client.CostRow{
 		Provider:      "aws",
@@ -29,7 +28,7 @@ func TestGenerateLineItemID_Determinism(t *testing.T) {
 	metrics := []string{"cost", "usage"}
 	reportToken := "cr_test123"
 
-	// Same inputs should produce same ID
+	// Same inputs should produce same ID.
 	id1 := GenerateLineItemID(reportToken, row, metrics)
 	id2 := GenerateLineItemID(reportToken, row, metrics)
 
@@ -38,7 +37,7 @@ func TestGenerateLineItemID_Determinism(t *testing.T) {
 	assert.Len(t, id1, 32) // SHA256 hash produces 32 hex chars (128 bits)
 }
 
-// TestGenerateLineItemID_DifferentReportToken produces different IDs
+// TestGenerateLineItemID_DifferentReportToken produces different IDs.
 func TestGenerateLineItemID_DifferentReportToken(t *testing.T) {
 	row := client.CostRow{
 		Provider:    "aws",
@@ -55,7 +54,7 @@ func TestGenerateLineItemID_DifferentReportToken(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different tokens should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentDate produces different IDs
+// TestGenerateLineItemID_DifferentDate produces different IDs.
 func TestGenerateLineItemID_DifferentDate(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -80,7 +79,7 @@ func TestGenerateLineItemID_DifferentDate(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different dates should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentProvider produces different IDs
+// TestGenerateLineItemID_DifferentProvider produces different IDs.
 func TestGenerateLineItemID_DifferentProvider(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -105,7 +104,7 @@ func TestGenerateLineItemID_DifferentProvider(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different providers should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentService produces different IDs
+// TestGenerateLineItemID_DifferentService produces different IDs.
 func TestGenerateLineItemID_DifferentService(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -130,7 +129,7 @@ func TestGenerateLineItemID_DifferentService(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different services should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentAccount produces different IDs
+// TestGenerateLineItemID_DifferentAccount produces different IDs.
 func TestGenerateLineItemID_DifferentAccount(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -155,7 +154,7 @@ func TestGenerateLineItemID_DifferentAccount(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different accounts should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentProject produces different IDs
+// TestGenerateLineItemID_DifferentProject produces different IDs.
 func TestGenerateLineItemID_DifferentProject(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -182,7 +181,7 @@ func TestGenerateLineItemID_DifferentProject(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different projects should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentRegion produces different IDs
+// TestGenerateLineItemID_DifferentRegion produces different IDs.
 func TestGenerateLineItemID_DifferentRegion(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -209,7 +208,7 @@ func TestGenerateLineItemID_DifferentRegion(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different regions should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentResourceID produces different IDs
+// TestGenerateLineItemID_DifferentResourceID produces different IDs.
 func TestGenerateLineItemID_DifferentResourceID(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -236,7 +235,7 @@ func TestGenerateLineItemID_DifferentResourceID(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different resource IDs should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentTags produces different IDs
+// TestGenerateLineItemID_DifferentTags produces different IDs.
 func TestGenerateLineItemID_DifferentTags(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -263,7 +262,7 @@ func TestGenerateLineItemID_DifferentTags(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different tag values should produce different IDs")
 }
 
-// TestGenerateLineItemID_SameTags_DifferentOrder produces same ID
+// TestGenerateLineItemID_SameTags_DifferentOrder produces same ID.
 func TestGenerateLineItemID_SameTags_DifferentOrder(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -290,7 +289,7 @@ func TestGenerateLineItemID_SameTags_DifferentOrder(t *testing.T) {
 	assert.Equal(t, id1, id2, "same tags in different order should produce same ID")
 }
 
-// TestGenerateLineItemID_DifferentMetrics produces different IDs
+// TestGenerateLineItemID_DifferentMetrics produces different IDs.
 func TestGenerateLineItemID_DifferentMetrics(t *testing.T) {
 	row := client.CostRow{
 		Provider:      "aws",
@@ -308,7 +307,7 @@ func TestGenerateLineItemID_DifferentMetrics(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different metrics should produce different IDs")
 }
 
-// TestGenerateLineItemID_SameMetrics_DifferentOrder produces same ID
+// TestGenerateLineItemID_SameMetrics_DifferentOrder produces same ID.
 func TestGenerateLineItemID_SameMetrics_DifferentOrder(t *testing.T) {
 	row := client.CostRow{
 		Provider:      "aws",
@@ -326,7 +325,7 @@ func TestGenerateLineItemID_SameMetrics_DifferentOrder(t *testing.T) {
 	assert.Equal(t, id1, id2, "same metrics in different order should produce same ID")
 }
 
-// TestGenerateLineItemID_DifferentCostValues produces different IDs
+// TestGenerateLineItemID_DifferentCostValues produces different IDs.
 func TestGenerateLineItemID_DifferentCostValues(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -351,7 +350,7 @@ func TestGenerateLineItemID_DifferentCostValues(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different cost values should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentUsageQuantity produces different IDs
+// TestGenerateLineItemID_DifferentUsageQuantity produces different IDs.
 func TestGenerateLineItemID_DifferentUsageQuantity(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:      "aws",
@@ -378,7 +377,7 @@ func TestGenerateLineItemID_DifferentUsageQuantity(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different usage quantities should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentListCost produces different IDs
+// TestGenerateLineItemID_DifferentListCost produces different IDs.
 func TestGenerateLineItemID_DifferentListCost(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -405,7 +404,7 @@ func TestGenerateLineItemID_DifferentListCost(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different list costs should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentAmortizedCost produces different IDs
+// TestGenerateLineItemID_DifferentAmortizedCost produces different IDs.
 func TestGenerateLineItemID_DifferentAmortizedCost(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:      "aws",
@@ -432,7 +431,7 @@ func TestGenerateLineItemID_DifferentAmortizedCost(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different amortized costs should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentTax produces different IDs
+// TestGenerateLineItemID_DifferentTax produces different IDs.
 func TestGenerateLineItemID_DifferentTax(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -459,7 +458,7 @@ func TestGenerateLineItemID_DifferentTax(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different tax values should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentCredit produces different IDs
+// TestGenerateLineItemID_DifferentCredit produces different IDs.
 func TestGenerateLineItemID_DifferentCredit(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -486,7 +485,7 @@ func TestGenerateLineItemID_DifferentCredit(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different credit values should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentRefund produces different IDs
+// TestGenerateLineItemID_DifferentRefund produces different IDs.
 func TestGenerateLineItemID_DifferentRefund(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -513,7 +512,7 @@ func TestGenerateLineItemID_DifferentRefund(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different refund values should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentUsageUnit produces different IDs
+// TestGenerateLineItemID_DifferentUsageUnit produces different IDs.
 func TestGenerateLineItemID_DifferentUsageUnit(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -540,7 +539,7 @@ func TestGenerateLineItemID_DifferentUsageUnit(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different usage units should produce different IDs")
 }
 
-// TestGenerateLineItemID_DifferentCurrency produces different IDs
+// TestGenerateLineItemID_DifferentCurrency produces different IDs.
 func TestGenerateLineItemID_DifferentCurrency(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -567,7 +566,7 @@ func TestGenerateLineItemID_DifferentCurrency(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "different currencies should produce different IDs")
 }
 
-// TestGenerateLineItemID_EmptyTags produces different ID than nil tags
+// TestGenerateLineItemID_EmptyTags produces different ID than nil tags.
 func TestGenerateLineItemID_EmptyTags_vs_NoTags(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -591,11 +590,11 @@ func TestGenerateLineItemID_EmptyTags_vs_NoTags(t *testing.T) {
 	id1 := GenerateLineItemID(reportToken, row1, metrics)
 	id2 := GenerateLineItemID(reportToken, row2, metrics)
 
-	// Both should produce same ID as empty maps are treated the same
+	// Both should produce same ID as empty maps are treated the same.
 	assert.Equal(t, id1, id2, "empty tags and nil tags should produce same ID")
 }
 
-// TestGenerateLineItemID_ZeroValues
+// TestGenerateLineItemID_ZeroValues.
 func TestGenerateLineItemID_ZeroValues(t *testing.T) {
 	row := client.CostRow{
 		Provider:           "aws",
@@ -620,7 +619,7 @@ func TestGenerateLineItemID_ZeroValues(t *testing.T) {
 	assert.Len(t, id, 32)
 }
 
-// TestGenerateLineItemID_LargeValues
+// TestGenerateLineItemID_LargeValues.
 func TestGenerateLineItemID_LargeValues(t *testing.T) {
 	row := client.CostRow{
 		Provider:           "aws",
@@ -645,7 +644,7 @@ func TestGenerateLineItemID_LargeValues(t *testing.T) {
 	assert.Len(t, id, 32)
 }
 
-// TestGenerateLineItemID_ComplexRow with all fields populated
+// TestGenerateLineItemID_ComplexRow with all fields populated.
 func TestGenerateLineItemID_ComplexRow(t *testing.T) {
 	row := client.CostRow{
 		Provider:           "aws",
@@ -676,12 +675,12 @@ func TestGenerateLineItemID_ComplexRow(t *testing.T) {
 	assert.NotEmpty(t, id)
 	assert.Len(t, id, 32)
 
-	// Verify determinism
+	// Verify determinism.
 	id2 := GenerateLineItemID(reportToken, row, metrics)
 	assert.Equal(t, id, id2)
 }
 
-// TestGenerateLineItemID_LongReportToken
+// TestGenerateLineItemID_LongReportToken.
 func TestGenerateLineItemID_LongReportToken(t *testing.T) {
 	row := client.CostRow{
 		Provider:    "aws",
@@ -699,7 +698,7 @@ func TestGenerateLineItemID_LongReportToken(t *testing.T) {
 	assert.Len(t, id, 32)
 }
 
-// TestGenerateLineItemID_SpecialCharactersInDimensions
+// TestGenerateLineItemID_SpecialCharactersInDimensions.
 func TestGenerateLineItemID_SpecialCharactersInDimensions(t *testing.T) {
 	row := client.CostRow{
 		Provider:    "aws",
@@ -720,9 +719,9 @@ func TestGenerateLineItemID_SpecialCharactersInDimensions(t *testing.T) {
 	assert.Len(t, id, 32)
 }
 
-// TestGenerateLineItemID_MultipleTagsConsistency
+// TestGenerateLineItemID_MultipleTagsConsistency.
 func TestGenerateLineItemID_MultipleTagsConsistency(t *testing.T) {
-	// Create row with multiple tags
+	// Create row with multiple tags.
 	row := client.CostRow{
 		Provider: "aws",
 		Service:  "EC2",
@@ -740,19 +739,19 @@ func TestGenerateLineItemID_MultipleTagsConsistency(t *testing.T) {
 	metrics := []string{"cost"}
 	reportToken := "cr_test"
 
-	// Generate ID multiple times - all should be identical
+	// Generate ID multiple times - all should be identical.
 	ids := make([]string, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		ids[i] = GenerateLineItemID(reportToken, row, metrics)
 	}
 
-	// All IDs should be the same
+	// All IDs should be the same.
 	for i := 1; i < len(ids); i++ {
 		assert.Equal(t, ids[0], ids[i], "multiple tag consistency check failed at index %d", i)
 	}
 }
 
-// TestGenerateLineItemID_EdgeCase_MinimalRow
+// TestGenerateLineItemID_EdgeCase_MinimalRow.
 func TestGenerateLineItemID_EdgeCase_MinimalRow(t *testing.T) {
 	row := client.CostRow{
 		BucketStart: time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
@@ -766,7 +765,7 @@ func TestGenerateLineItemID_EdgeCase_MinimalRow(t *testing.T) {
 	assert.Len(t, id, 32)
 }
 
-// TestGenerateLineItemID_DifferentTimeOfDay_SameDate
+// TestGenerateLineItemID_DifferentTimeOfDay_SameDate.
 func TestGenerateLineItemID_DifferentTimeOfDay_SameDate(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -788,11 +787,11 @@ func TestGenerateLineItemID_DifferentTimeOfDay_SameDate(t *testing.T) {
 	id1 := GenerateLineItemID(reportToken, row1, metrics)
 	id2 := GenerateLineItemID(reportToken, row2, metrics)
 
-	// Same date should produce same ID regardless of time
+	// Same date should produce same ID regardless of time.
 	assert.Equal(t, id1, id2, "same date with different times should produce same ID")
 }
 
-// TestGenerateLineItemID_VeryPreciseFloatValues
+// TestGenerateLineItemID_VeryPreciseFloatValues.
 func TestGenerateLineItemID_VeryPreciseFloatValues(t *testing.T) {
 	row1 := client.CostRow{
 		Provider:    "aws",
@@ -814,12 +813,12 @@ func TestGenerateLineItemID_VeryPreciseFloatValues(t *testing.T) {
 	id1 := GenerateLineItemID(reportToken, row1, metrics)
 	id2 := GenerateLineItemID(reportToken, row2, metrics)
 
-	// Very small differences should produce different IDs
-	// Using %.16g format provides good precision
+	// Very small differences should produce different IDs.
+	// Using %.16g format provides good precision.
 	assert.NotEqual(t, id1, id2, "very small float differences should produce different IDs")
 }
 
-// TestGenerateLineItemID_EmptyMetricsArray
+// TestGenerateLineItemID_EmptyMetricsArray.
 func TestGenerateLineItemID_EmptyMetricsArray(t *testing.T) {
 	row := client.CostRow{
 		Provider:    "aws",
@@ -837,7 +836,7 @@ func TestGenerateLineItemID_EmptyMetricsArray(t *testing.T) {
 	assert.NotEmpty(t, id1)
 }
 
-// TestGenerateLineItemID_ConsistencyAcrossMultipleCalls_100Variations
+// TestGenerateLineItemID_ConsistencyAcrossMultipleCalls_100Variations.
 func TestGenerateLineItemID_ConsistencyAcrossMultipleCalls_100Variations(t *testing.T) {
 	testCases := make([]struct {
 		reportToken string
@@ -845,7 +844,7 @@ func TestGenerateLineItemID_ConsistencyAcrossMultipleCalls_100Variations(t *test
 		metrics     []string
 	}, 0)
 
-	// Generate 50+ unique variations
+	// Generate 50+ unique variations.
 	providers := []string{"aws", "gcp", "azure"}
 	services := []string{"EC2", "S3", "RDS", "Lambda"}
 	accounts := []string{"111111111", "222222222", "333333333"}
@@ -881,8 +880,8 @@ func TestGenerateLineItemID_ConsistencyAcrossMultipleCalls_100Variations(t *test
 		}
 	}
 
-	// Add more edge cases to reach 100+ variations
-	for i := 0; i < 50; i++ {
+	// Add more edge cases to reach 100+ variations.
+	for i := range 50 {
 		row := client.CostRow{
 			Provider:      "aws",
 			Service:       "EC2",
@@ -903,7 +902,7 @@ func TestGenerateLineItemID_ConsistencyAcrossMultipleCalls_100Variations(t *test
 		})
 	}
 
-	// Verify each case is deterministic
+	// Verify each case is deterministic.
 	for i, tc := range testCases {
 		id1 := GenerateLineItemID(tc.reportToken, tc.row, tc.metrics)
 		id2 := GenerateLineItemID(tc.reportToken, tc.row, tc.metrics)
@@ -911,7 +910,7 @@ func TestGenerateLineItemID_ConsistencyAcrossMultipleCalls_100Variations(t *test
 		assert.Len(t, id1, 32, "hash length should be 32 for test case %d", i)
 	}
 
-	// Verify different cases produce different IDs (spot check)
-	// We skip this check because structs with maps cannot be directly compared
+	// Verify different cases produce different IDs (spot check).
+	// We skip this check because structs with maps cannot be directly compared.
 	// and the test is primarily about determinism, which we've verified above
 }
