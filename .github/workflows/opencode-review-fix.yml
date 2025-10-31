@@ -42,12 +42,20 @@ jobs:
       - name: Install OpenCode CLI
         run: curl -fsSL https://opencode.ai/install | bash
         env:
-          VERSION: 0.15.10
+          VERSION: 0.15.30
 
       - name: Checkout PR Branch
         run: gh pr checkout ${{ github.event.issue.number }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5.0
+          args: --version
+          skip-cache: false
+          install-mode: binary
 
       - name: Run OpenCode Review Fix
         run: |
@@ -99,10 +107,7 @@ jobs:
           echo "🧪 Running tests..."
           make test
 
-          echo "✅ All Go validations passed"
+          echo "🔍 Running linter..."
+          make lint
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.5.0
-          args: --timeout=5m
+          echo "✅ All Go validations passed"
