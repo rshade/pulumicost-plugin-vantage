@@ -43,7 +43,7 @@ test-coverage:
 
 lint:
 	@echo "Running golangci-lint..."
-	@golangci-lint run ./... --timeout=5m
+	@golangci-lint run ./... --timeout=5m --allow-parallel-runners
 
 vet:
 	@echo "Running go vet..."
