@@ -196,3 +196,136 @@ func TestDiagnostics_ComplexScenario(t *testing.T) {
 	assert.Equal(t, "v1.2.3", diag.SourceInfo["api_version"])
 	assert.Equal(t, 85, diag.SourceInfo["data_quality_score"])
 }
+
+func TestDiagnostics_MissingAccountID(t *testing.T) {
+	diag := NewDiagnostics()
+
+	// Test adding missing account_id field.
+	diag.AddMissingField("account_id", "FOCUS 1.2 field billing_account_id is empty")
+
+	assert.True(t, diag.HasIssues())
+	assert.Len(t, diag.MissingFields, 1)
+	assert.Equal(t, "FOCUS 1.2 field billing_account_id is empty", diag.MissingFields["account_id"])
+}
+
+func TestDiagnostics_MissingRegion(t *testing.T) {
+	diag := NewDiagnostics()
+
+	// Test adding missing region field.
+	diag.AddMissingField("region", "FOCUS 1.2 field region is empty")
+
+	assert.True(t, diag.HasIssues())
+	assert.Len(t, diag.MissingFields, 1)
+	assert.Equal(t, "FOCUS 1.2 field region is empty", diag.MissingFields["region"])
+}
+
+func TestDiagnostics_MissingCurrency(t *testing.T) {
+	diag := NewDiagnostics()
+
+	// Test adding missing currency field.
+	diag.AddMissingField("currency", "FOCUS 1.2 field billing_currency is empty")
+
+	assert.True(t, diag.HasIssues())
+	assert.Len(t, diag.MissingFields, 1)
+	assert.Equal(t, "FOCUS 1.2 field billing_currency is empty", diag.MissingFields["currency"])
+}
+
+func TestDiagnostics_UsageUnitWithoutAmount(t *testing.T) {
+	diag := NewDiagnostics()
+
+	// Test warning for usage_unit without usage_amount.
+	diag.AddWarning("usage_unit_present_but_amount_missing")
+
+	assert.True(t, diag.HasIssues())
+	assert.Len(t, diag.Warnings, 1)
+	assert.Contains(t, diag.Warnings, "usage_unit_present_but_amount_missing")
+}
+
+func TestDiagnostics_ListCostLessThanNetCost(t *testing.T) {
+	diag := NewDiagnostics()
+
+	// Test warning for list_cost less than net_cost.
+	diag.AddWarning("list_cost_less_than_net_cost")
+
+	assert.True(t, diag.HasIssues())
+	assert.Len(t, diag.Warnings, 1)
+	assert.Contains(t, diag.Warnings, "list_cost_less_than_net_cost")
+}
+
+func TestDiagnostics_MissingResourceID(t *testing.T) {
+	diag := NewDiagnostics()
+
+	// Test warning for missing resource_id.
+	diag.AddWarning("missing_resource_id")
+
+	assert.True(t, diag.HasIssues())
+	assert.Len(t, diag.Warnings, 1)
+	assert.Contains(t, diag.Warnings, "missing_resource_id")
+}
+
+func TestDiagnosticsSummary_MultipleMissingFieldTypes(t *testing.T) {
+	summary := NewDiagnosticsSummary()
+
+	// Record 1: missing provider and account_id.
+	diag1 := NewDiagnostics()
+	diag1.AddMissingField("provider", "required FOCUS 1.2 field cloud_provider is empty")
+	diag1.AddMissingField("account_id", "FOCUS 1.2 field billing_account_id is empty")
+	summary.AddRecordDiagnostics(diag1)
+
+	// Record 2: missing region and currency.
+	diag2 := NewDiagnostics()
+	diag2.AddMissingField("region", "FOCUS 1.2 field region is empty")
+	diag2.AddMissingField("currency", "FOCUS 1.2 field billing_currency is empty")
+	summary.AddRecordDiagnostics(diag2)
+
+	// Record 3: multiple warnings.
+	diag3 := NewDiagnostics()
+	diag3.AddWarning("negative_net_cost")
+	diag3.AddWarning("list_cost_less_than_net_cost")
+	diag3.AddWarning("missing_resource_id")
+	summary.AddRecordDiagnostics(diag3)
+
+	// Verify summary aggregation.
+	assert.Equal(t, 3, summary.TotalRecords)
+	assert.Equal(t, 3, summary.RecordsWithIssues)
+	assert.Equal(t, 1, summary.MissingFields["provider"])
+	assert.Equal(t, 1, summary.MissingFields["account_id"])
+	assert.Equal(t, 1, summary.MissingFields["region"])
+	assert.Equal(t, 1, summary.MissingFields["currency"])
+	assert.Equal(t, 1, summary.Warnings["negative_net_cost"])
+	assert.Equal(t, 1, summary.Warnings["list_cost_less_than_net_cost"])
+	assert.Equal(t, 1, summary.Warnings["missing_resource_id"])
+}
+
+func TestDiagnosticsSummary_LargeScaleAggregation(t *testing.T) {
+	summary := NewDiagnosticsSummary()
+
+	// Simulate processing 100 records with various issues.
+	for i := range 100 {
+		diag := NewDiagnostics()
+
+		// Every 10th record has missing provider.
+		if i%10 == 0 {
+			diag.AddMissingField("provider", "required FOCUS 1.2 field cloud_provider is empty")
+		}
+
+		// Every 5th record has missing currency.
+		if i%5 == 0 {
+			diag.AddMissingField("currency", "FOCUS 1.2 field billing_currency is empty")
+		}
+
+		// Every 7th record has negative cost warning.
+		if i%7 == 0 {
+			diag.AddWarning("negative_net_cost")
+		}
+
+		summary.AddRecordDiagnostics(diag)
+	}
+
+	// Verify aggregation counts.
+	assert.Equal(t, 100, summary.TotalRecords)
+	assert.Positive(t, summary.RecordsWithIssues)
+	assert.Equal(t, 10, summary.MissingFields["provider"])
+	assert.Equal(t, 20, summary.MissingFields["currency"])
+	assert.Equal(t, 15, summary.Warnings["negative_net_cost"])
+}

@@ -159,9 +159,9 @@ func TestAdapter_mapVantageRowToCostRecord_WithMissingFields(t *testing.T) {
 	assert.Contains(t, record.Diagnostics.MissingFields, "provider")
 	assert.Contains(t, record.Diagnostics.MissingFields, "service")
 	assert.Contains(t, record.Diagnostics.MissingFields, "net_cost")
-	assert.Equal(t, "required field is empty", record.Diagnostics.MissingFields["provider"])
-	assert.Equal(t, "required field is empty", record.Diagnostics.MissingFields["service"])
-	assert.Equal(t, "required field is nil or zero", record.Diagnostics.MissingFields["net_cost"])
+	assert.Equal(t, "required FOCUS 1.2 field cloud_provider is empty", record.Diagnostics.MissingFields["provider"])
+	assert.Equal(t, "required FOCUS 1.2 field service_name is empty", record.Diagnostics.MissingFields["service"])
+	assert.Equal(t, "required FOCUS 1.2 field net_cost is nil or zero", record.Diagnostics.MissingFields["net_cost"])
 }
 
 func TestAdapter_generateQueryHash(t *testing.T) {

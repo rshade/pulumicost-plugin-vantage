@@ -100,13 +100,19 @@ func (a *Adapter) Sync(ctx context.Context, cfg Config, sink Sink) error {
 	})
 
 	// Determine sync mode based on configuration.
+	var err error
 	if cfg.EndDate == nil {
 		// Incremental sync: D-3 to D-1.
-		return a.syncIncremental(ctx, cfg, sink)
+		err = a.syncIncremental(ctx, cfg, sink)
+	} else {
+		// Backfill sync: specified date range.
+		err = a.syncBackfill(ctx, cfg, sink)
 	}
 
-	// Backfill sync: specified date range.
-	return a.syncBackfill(ctx, cfg, sink)
+	// Log diagnostic summary after sync completes, passing the error.
+	a.logDiagnosticsSummary(ctx, err)
+
+	return err
 }
 
 // syncIncremental performs incremental sync with D-3 to D-1 lag window.
@@ -415,4 +421,80 @@ func (a *Adapter) generateQueryHash(query client.Query) string {
 	// Generate hash.
 	hash := sha256.Sum256([]byte(strings.Join(parts, "|")))
 	return hex.EncodeToString(hash[:16]) // First 32 hex chars
+}
+
+// logDiagnosticsSummary logs the aggregated diagnostics summary after sync completion.
+// If err is non-nil, it logs an error/failure summary instead of a success message.
+func (a *Adapter) logDiagnosticsSummary(ctx context.Context, err error) {
+	summary := a.GetDiagnosticsSummary()
+
+	// If sync failed, log error summary instead of success.
+	if err != nil {
+		a.logSyncFailure(ctx, summary, err)
+		return
+	}
+
+	// Log summary overview for successful sync.
+	a.logSyncSuccess(ctx, summary)
+}
+
+// logSyncFailure logs the error summary when sync fails.
+func (a *Adapter) logSyncFailure(ctx context.Context, summary *DiagnosticsSummary, err error) {
+	a.logger.Error(ctx, "Sync failed", map[string]interface{}{
+		"adapter":            "vantage",
+		"operation":          "sync_summary",
+		"error":              err.Error(),
+		"total_records":      summary.TotalRecords,
+		"records_with_issue": summary.RecordsWithIssues,
+	})
+
+	// Still log diagnostic details if there were data quality issues.
+	if !summary.HasIssues() {
+		return
+	}
+
+	a.logDiagnosticDetails(ctx, summary)
+}
+
+// logSyncSuccess logs the success summary when sync completes successfully.
+func (a *Adapter) logSyncSuccess(ctx context.Context, summary *DiagnosticsSummary) {
+	if summary.HasIssues() {
+		a.logger.Warn(ctx, "Sync completed with data quality issues", map[string]interface{}{
+			"adapter":            "vantage",
+			"operation":          "sync_summary",
+			"total_records":      summary.TotalRecords,
+			"records_with_issue": summary.RecordsWithIssues,
+			"missing_fields":     len(summary.MissingFields),
+			"warnings":           len(summary.Warnings),
+		})
+		a.logDiagnosticDetails(ctx, summary)
+		return
+	}
+
+	a.logger.Info(ctx, "Sync completed successfully with no data quality issues", map[string]interface{}{
+		"adapter":       "vantage",
+		"operation":     "sync_summary",
+		"total_records": summary.TotalRecords,
+	})
+}
+
+// logDiagnosticDetails logs detailed diagnostic information.
+func (a *Adapter) logDiagnosticDetails(ctx context.Context, summary *DiagnosticsSummary) {
+	// Log detailed missing fields breakdown.
+	if len(summary.MissingFields) > 0 {
+		a.logger.Warn(ctx, "Missing fields summary", map[string]interface{}{
+			"adapter":        "vantage",
+			"operation":      "diagnostic_summary",
+			"missing_fields": summary.MissingFields,
+		})
+	}
+
+	// Log detailed warnings breakdown.
+	if len(summary.Warnings) > 0 {
+		a.logger.Warn(ctx, "Warnings summary", map[string]interface{}{
+			"adapter":   "vantage",
+			"operation": "diagnostic_summary",
+			"warnings":  summary.Warnings,
+		})
+	}
 }
