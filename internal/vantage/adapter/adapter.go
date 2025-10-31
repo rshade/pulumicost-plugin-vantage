@@ -109,8 +109,8 @@ func (a *Adapter) Sync(ctx context.Context, cfg Config, sink Sink) error {
 		err = a.syncBackfill(ctx, cfg, sink)
 	}
 
-	// Log diagnostic summary after sync completes.
-	a.logDiagnosticsSummary(ctx)
+	// Log diagnostic summary after sync completes, passing the error.
+	a.logDiagnosticsSummary(ctx, err)
 
 	return err
 }
@@ -424,10 +424,40 @@ func (a *Adapter) generateQueryHash(query client.Query) string {
 }
 
 // logDiagnosticsSummary logs the aggregated diagnostics summary after sync completion.
-func (a *Adapter) logDiagnosticsSummary(ctx context.Context) {
+// If err is non-nil, it logs an error/failure summary instead of a success message.
+func (a *Adapter) logDiagnosticsSummary(ctx context.Context, err error) {
 	summary := a.GetDiagnosticsSummary()
 
-	// Log summary overview.
+	// If sync failed, log error summary instead of success.
+	if err != nil {
+		a.logSyncFailure(ctx, summary, err)
+		return
+	}
+
+	// Log summary overview for successful sync.
+	a.logSyncSuccess(ctx, summary)
+}
+
+// logSyncFailure logs the error summary when sync fails.
+func (a *Adapter) logSyncFailure(ctx context.Context, summary *DiagnosticsSummary, err error) {
+	a.logger.Error(ctx, "Sync failed", map[string]interface{}{
+		"adapter":            "vantage",
+		"operation":          "sync_summary",
+		"error":              err.Error(),
+		"total_records":      summary.TotalRecords,
+		"records_with_issue": summary.RecordsWithIssues,
+	})
+
+	// Still log diagnostic details if there were data quality issues.
+	if !summary.HasIssues() {
+		return
+	}
+
+	a.logDiagnosticDetails(ctx, summary)
+}
+
+// logSyncSuccess logs the success summary when sync completes successfully.
+func (a *Adapter) logSyncSuccess(ctx context.Context, summary *DiagnosticsSummary) {
 	if summary.HasIssues() {
 		a.logger.Warn(ctx, "Sync completed with data quality issues", map[string]interface{}{
 			"adapter":            "vantage",
@@ -437,29 +467,34 @@ func (a *Adapter) logDiagnosticsSummary(ctx context.Context) {
 			"missing_fields":     len(summary.MissingFields),
 			"warnings":           len(summary.Warnings),
 		})
+		a.logDiagnosticDetails(ctx, summary)
+		return
+	}
 
-		// Log detailed missing fields breakdown.
-		if len(summary.MissingFields) > 0 {
-			a.logger.Warn(ctx, "Missing fields summary", map[string]interface{}{
-				"adapter":        "vantage",
-				"operation":      "diagnostic_summary",
-				"missing_fields": summary.MissingFields,
-			})
-		}
+	a.logger.Info(ctx, "Sync completed successfully with no data quality issues", map[string]interface{}{
+		"adapter":       "vantage",
+		"operation":     "sync_summary",
+		"total_records": summary.TotalRecords,
+	})
+}
 
-		// Log detailed warnings breakdown.
-		if len(summary.Warnings) > 0 {
-			a.logger.Warn(ctx, "Warnings summary", map[string]interface{}{
-				"adapter":   "vantage",
-				"operation": "diagnostic_summary",
-				"warnings":  summary.Warnings,
-			})
-		}
-	} else {
-		a.logger.Info(ctx, "Sync completed successfully with no data quality issues", map[string]interface{}{
-			"adapter":       "vantage",
-			"operation":     "sync_summary",
-			"total_records": summary.TotalRecords,
+// logDiagnosticDetails logs detailed diagnostic information.
+func (a *Adapter) logDiagnosticDetails(ctx context.Context, summary *DiagnosticsSummary) {
+	// Log detailed missing fields breakdown.
+	if len(summary.MissingFields) > 0 {
+		a.logger.Warn(ctx, "Missing fields summary", map[string]interface{}{
+			"adapter":        "vantage",
+			"operation":      "diagnostic_summary",
+			"missing_fields": summary.MissingFields,
+		})
+	}
+
+	// Log detailed warnings breakdown.
+	if len(summary.Warnings) > 0 {
+		a.logger.Warn(ctx, "Warnings summary", map[string]interface{}{
+			"adapter":   "vantage",
+			"operation": "diagnostic_summary",
+			"warnings":  summary.Warnings,
 		})
 	}
 }
