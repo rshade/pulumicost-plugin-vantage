@@ -1,6 +1,8 @@
 package adapter
 
 import (
+	"context"
+
 	"github.com/rshade/pulumicost-plugin-vantage/internal/vantage/client"
 )
 
@@ -68,29 +70,97 @@ func (a *Adapter) mapVantageRowToCostRecord(
 func (a *Adapter) addDiagnostics(record *CostRecord, _ client.CostRow) {
 	diag := record.Diagnostics
 
-	// Check for missing required fields.
+	// Check for missing required FOCUS 1.2 fields.
 	if record.Provider == "" {
-		diag.AddMissingField("provider", "required field is empty")
+		reason := "required FOCUS 1.2 field cloud_provider is empty"
+		diag.AddMissingField("provider", reason)
+		a.logMissingField("provider", reason, record)
 	}
 	if record.Service == "" {
-		diag.AddMissingField("service", "required field is empty")
+		reason := "required FOCUS 1.2 field service_name is empty"
+		diag.AddMissingField("service", reason)
+		a.logMissingField("service", reason, record)
+	}
+	if record.AccountID == "" {
+		reason := "FOCUS 1.2 field billing_account_id is empty"
+		diag.AddMissingField("account_id", reason)
+		a.logMissingField("account_id", reason, record)
+	}
+	if record.Region == "" {
+		reason := "FOCUS 1.2 field region is empty"
+		diag.AddMissingField("region", reason)
+		a.logMissingField("region", reason, record)
+	}
+	if record.Currency == "" {
+		reason := "FOCUS 1.2 field billing_currency is empty"
+		diag.AddMissingField("currency", reason)
+		a.logMissingField("currency", reason, record)
 	}
 	if record.NetCost == nil || *record.NetCost == 0 {
-		diag.AddMissingField("net_cost", "required field is nil or zero")
+		reason := "required FOCUS 1.2 field net_cost is nil or zero"
+		diag.AddMissingField("net_cost", reason)
+		a.logMissingField("net_cost", reason, record)
 	}
 
-	// Check for zero values that might indicate data issues.
-	if record.UsageAmount != nil && *record.UsageAmount == 0 && record.UsageUnit == "" {
-		diag.Warnings = append(diag.Warnings, "usage_amount_present_but_unit_missing")
+	// Check for usage metric inconsistencies.
+	if record.UsageAmount != nil && *record.UsageAmount != 0 && record.UsageUnit == "" {
+		warning := "usage_amount_present_but_unit_missing"
+		diag.AddWarning(warning)
+		a.logWarning(warning, "FOCUS 1.2 field usage_unit missing when usage_amount is present", record)
+	}
+	if record.UsageAmount == nil && record.UsageUnit != "" {
+		warning := "usage_unit_present_but_amount_missing"
+		diag.AddWarning(warning)
+		a.logWarning(warning, "FOCUS 1.2 field usage_amount missing when usage_unit is present", record)
 	}
 
 	// Check for unusual cost values.
 	if record.NetCost != nil && *record.NetCost < 0 {
-		diag.Warnings = append(diag.Warnings, "negative_net_cost")
+		warning := "negative_net_cost"
+		diag.AddWarning(warning)
+		a.logWarning(warning, "net_cost is negative, may indicate refund or credit", record)
+	}
+	if record.ListCost != nil && record.NetCost != nil && *record.ListCost < *record.NetCost {
+		warning := "list_cost_less_than_net_cost"
+		diag.AddWarning(warning)
+		a.logWarning(warning, "list_cost is less than net_cost, unusual pattern", record)
+	}
+
+	// Check for resource identification issues.
+	if record.ResourceID == "" && record.Service != "" {
+		warning := "missing_resource_id"
+		diag.AddWarning(warning)
+		a.logWarning(warning, "FOCUS 1.2 field resource_id is empty for service", record)
 	}
 
 	// If no diagnostics were added, set to nil.
 	if !diag.HasIssues() {
 		record.Diagnostics = nil
 	}
+}
+
+// logMissingField logs a missing field diagnostic with structured fields.
+func (a *Adapter) logMissingField(fieldName, reason string, record *CostRecord) {
+	a.logger.Warn(context.TODO(), "Missing field detected", map[string]interface{}{
+		"adapter":   "vantage",
+		"operation": "field_validation",
+		"field":     fieldName,
+		"reason":    reason,
+		"timestamp": record.Timestamp.Format("2006-01-02"),
+		"provider":  record.Provider,
+		"service":   record.Service,
+	})
+}
+
+// logWarning logs a diagnostic warning with structured fields.
+func (a *Adapter) logWarning(warning, description string, record *CostRecord) {
+	a.logger.Warn(context.TODO(), "Data quality warning", map[string]interface{}{
+		"adapter":     "vantage",
+		"operation":   "data_validation",
+		"warning":     warning,
+		"description": description,
+		"timestamp":   record.Timestamp.Format("2006-01-02"),
+		"provider":    record.Provider,
+		"service":     record.Service,
+	})
 }

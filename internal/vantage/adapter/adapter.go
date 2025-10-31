@@ -100,13 +100,19 @@ func (a *Adapter) Sync(ctx context.Context, cfg Config, sink Sink) error {
 	})
 
 	// Determine sync mode based on configuration.
+	var err error
 	if cfg.EndDate == nil {
 		// Incremental sync: D-3 to D-1.
-		return a.syncIncremental(ctx, cfg, sink)
+		err = a.syncIncremental(ctx, cfg, sink)
+	} else {
+		// Backfill sync: specified date range.
+		err = a.syncBackfill(ctx, cfg, sink)
 	}
 
-	// Backfill sync: specified date range.
-	return a.syncBackfill(ctx, cfg, sink)
+	// Log diagnostic summary after sync completes.
+	a.logDiagnosticsSummary(ctx)
+
+	return err
 }
 
 // syncIncremental performs incremental sync with D-3 to D-1 lag window.
@@ -415,4 +421,45 @@ func (a *Adapter) generateQueryHash(query client.Query) string {
 	// Generate hash.
 	hash := sha256.Sum256([]byte(strings.Join(parts, "|")))
 	return hex.EncodeToString(hash[:16]) // First 32 hex chars
+}
+
+// logDiagnosticsSummary logs the aggregated diagnostics summary after sync completion.
+func (a *Adapter) logDiagnosticsSummary(ctx context.Context) {
+	summary := a.GetDiagnosticsSummary()
+
+	// Log summary overview.
+	if summary.HasIssues() {
+		a.logger.Warn(ctx, "Sync completed with data quality issues", map[string]interface{}{
+			"adapter":            "vantage",
+			"operation":          "sync_summary",
+			"total_records":      summary.TotalRecords,
+			"records_with_issue": summary.RecordsWithIssues,
+			"missing_fields":     len(summary.MissingFields),
+			"warnings":           len(summary.Warnings),
+		})
+
+		// Log detailed missing fields breakdown.
+		if len(summary.MissingFields) > 0 {
+			a.logger.Warn(ctx, "Missing fields summary", map[string]interface{}{
+				"adapter":        "vantage",
+				"operation":      "diagnostic_summary",
+				"missing_fields": summary.MissingFields,
+			})
+		}
+
+		// Log detailed warnings breakdown.
+		if len(summary.Warnings) > 0 {
+			a.logger.Warn(ctx, "Warnings summary", map[string]interface{}{
+				"adapter":   "vantage",
+				"operation": "diagnostic_summary",
+				"warnings":  summary.Warnings,
+			})
+		}
+	} else {
+		a.logger.Info(ctx, "Sync completed successfully with no data quality issues", map[string]interface{}{
+			"adapter":       "vantage",
+			"operation":     "sync_summary",
+			"total_records": summary.TotalRecords,
+		})
+	}
 }
