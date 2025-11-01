@@ -51,11 +51,13 @@ jobs:
         run: |
           echo "Loading stub mappings..."
           for mapping in test/wiremock/mappings/*.json; do
-            echo "Loading $(basename $mapping)..."
-            curl -X POST \
-              -H "Content-Type: application/json" \
-              -d @"$mapping" \
-              http://localhost:8080/__admin/mappings
+            if [ -f "$mapping" ]; then
+              echo "Loading $(basename "$mapping")..."
+              curl -X POST \
+                -H "Content-Type: application/json" \
+                -d @"$mapping" \
+                http://localhost:8080/__admin/mappings
+            fi
           done
 
           # Verify mappings were loaded
