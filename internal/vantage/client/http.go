@@ -82,7 +82,7 @@ func (c *httpClient) doCostsRequest(ctx context.Context, query Query) (Page, err
 		}
 
 		// Wait before retrying.
-		if waitErr := c.waitBeforeRetry(ctx, attempt); waitErr != nil {
+		if waitErr := c.waitBeforeRetry(ctx, attempt, err); waitErr != nil {
 			return Page{}, waitErr
 		}
 	}
@@ -229,7 +229,7 @@ func (c *httpClient) doForecastRequest(ctx context.Context, reportToken string, 
 		}
 
 		// Wait before retrying.
-		if waitErr := c.waitBeforeRetry(ctx, attempt); waitErr != nil {
+		if waitErr := c.waitBeforeRetry(ctx, attempt, err); waitErr != nil {
 			return Forecast{}, waitErr
 		}
 	}
@@ -326,10 +326,12 @@ func (c *httpClient) doForecastRequestOnce(
 
 // shouldRetry determines if an error should trigger a retry.
 func (c *httpClient) shouldRetry(err error, attempt int) bool {
+	// Always check attempt count first, regardless of error type.
 	if attempt >= c.maxRetries {
 		return false
 	}
 
+	// Check if this is a retryable error type.
 	var rateLimitErr *rateLimitError
 	if errors.As(err, &rateLimitErr) {
 		return true
@@ -344,26 +346,40 @@ func (c *httpClient) shouldRetry(err error, attempt int) bool {
 }
 
 // waitBeforeRetry implements exponential backoff with jitter.
-func (c *httpClient) waitBeforeRetry(ctx context.Context, attempt int) error {
-	// Exponential backoff: baseDelay * exponentialBase^attempt.
-	delay := time.Duration(float64(baseBackoffDelay) * math.Pow(exponentialBase, float64(attempt)))
+func (c *httpClient) waitBeforeRetry(ctx context.Context, attempt int, lastErr error) error {
+	var delay time.Duration
 
-	// Add jitter (±25%) as a fraction.
-	//nolint:gosec // math/rand/v2 is acceptable for non-cryptographic jitter
-	jitterFrac := rand.Float64()*jitterFraction - jitterOffset
-	delay = time.Duration(float64(delay) * (1.0 + jitterFrac))
+	// Check if this is a rate limit error with specific reset time.
+	var rateLimitErr *rateLimitError
+	if errors.As(lastErr, &rateLimitErr) && rateLimitErr.resetIn > 0 {
+		delay = rateLimitErr.resetIn
+		c.logger.Debug(ctx, "Waiting for rate limit reset", map[string]interface{}{
+			"adapter":   "vantage",
+			"operation": "rate_limit_wait",
+			"attempt":   attempt,
+			"delay":     delay,
+		})
+	} else {
+		// Exponential backoff: baseDelay * exponentialBase^attempt.
+		delay = time.Duration(float64(baseBackoffDelay) * math.Pow(exponentialBase, float64(attempt)))
 
-	// Cap at maxBackoffDelay.
-	if delay > maxBackoffDelay {
-		delay = maxBackoffDelay
+		// Add jitter (±25%) as a fraction.
+		//nolint:gosec // math/rand/v2 is acceptable for non-cryptographic jitter
+		jitterFrac := rand.Float64()*jitterFraction - jitterOffset
+		delay = time.Duration(float64(delay) * (1.0 + jitterFrac))
+
+		// Cap at maxBackoffDelay.
+		if delay > maxBackoffDelay {
+			delay = maxBackoffDelay
+		}
+
+		c.logger.Debug(ctx, "Waiting before retry", map[string]interface{}{
+			"adapter":   "vantage",
+			"operation": "retry_backoff",
+			"attempt":   attempt,
+			"delay":     delay,
+		})
 	}
-
-	c.logger.Debug(ctx, "Waiting before retry", map[string]interface{}{
-		"adapter":   "vantage",
-		"operation": "retry_backoff",
-		"attempt":   attempt,
-		"delay":     delay,
-	})
 
 	select {
 	case <-ctx.Done():

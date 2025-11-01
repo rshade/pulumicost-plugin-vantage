@@ -444,6 +444,403 @@ func TestRedactURL(t *testing.T) {
 	assert.Equal(t, expected, redacted)
 }
 
+func TestClient_ContextCancellationDuringRetry(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Always return 503 to trigger retries.
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 30,
+		MaxRetries: 5,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	// Create context that cancels after short delay.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	startTime := time.Now()
+	_, err = client.Costs(ctx, query)
+	elapsed := time.Since(startTime)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context deadline exceeded")
+	// Should fail quickly due to context cancellation, not wait for all retries.
+	assert.Less(t, elapsed, time.Second)
+}
+
+func TestClient_RetryOn502(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 5,
+		MaxRetries: 1,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	_, err = client.Costs(context.Background(), query)
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+}
+
+func TestClient_RetryOn504(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 5,
+		MaxRetries: 1,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	_, err = client.Costs(context.Background(), query)
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+}
+
+func TestClient_RetryOn500(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 5,
+		MaxRetries: 1,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	_, err = client.Costs(context.Background(), query)
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+}
+
+func TestClient_MaxRetriesExhausted(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		// Always fail with 503.
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 5,
+		MaxRetries: 2,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	_, err = client.Costs(context.Background(), query)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed after 3 attempts")
+	assert.Equal(t, 3, callCount) // Initial + 2 retries
+}
+
+func TestClient_ExponentialBackoffTiming(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		if callCount <= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 30,
+		MaxRetries: 2,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	startTime := time.Now()
+	_, err = client.Costs(context.Background(), query)
+	elapsed := time.Since(startTime)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, callCount)
+	// Should have delays between retries (exponential backoff).
+	// First retry delay: ~1s, second retry delay: ~2s (with jitter ±25%).
+	// Total should be at least 2 seconds but less than 6 seconds.
+	assert.GreaterOrEqual(t, elapsed, time.Second*2)
+	assert.Less(t, elapsed, time.Second*6)
+}
+
+func TestClient_JitterVariance(t *testing.T) {
+	// Run multiple retry scenarios and verify jitter adds variance.
+	delays := make([]time.Duration, 5)
+
+	for i := range 5 {
+		callCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			if callCount == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+		}))
+
+		client, err := New(Config{
+			BaseURL:    server.URL,
+			Token:      "test-token",
+			Timeout:    time.Second * 10,
+			MaxRetries: 1,
+			Logger:     NewNoopLogger(),
+		})
+		require.NoError(t, err)
+
+		query := Query{
+			WorkspaceToken: "test-workspace",
+			StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+			Granularity:    "day",
+		}
+
+		startTime := time.Now()
+		_, err = client.Costs(context.Background(), query)
+		delays[i] = time.Since(startTime)
+
+		require.NoError(t, err)
+		server.Close()
+	}
+
+	// Verify variance in delays (jitter should cause different timings).
+	// At least one delay should differ by more than 100ms from another.
+	hasVariance := false
+	for i := range delays {
+		for j := i + 1; j < len(delays); j++ {
+			diff := delays[i] - delays[j]
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff > 100*time.Millisecond {
+				hasVariance = true
+				break
+			}
+		}
+		if hasVariance {
+			break
+		}
+	}
+	assert.True(t, hasVariance, "jitter should introduce timing variance")
+}
+
+func TestClient_RateLimitRetryAfterHeader(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 10,
+		MaxRetries: 1,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	startTime := time.Now()
+	_, err = client.Costs(context.Background(), query)
+	elapsed := time.Since(startTime)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+	// Should wait at least 1 second due to Retry-After header.
+	assert.GreaterOrEqual(t, elapsed, time.Second)
+}
+
+func TestClient_429WithSuccessfulBackoff(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.Header().Set("X-RateLimit-Reset", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(CostsResponse{Data: []CostRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 10,
+		MaxRetries: 1,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := Query{
+		WorkspaceToken: "test-workspace",
+		StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		Granularity:    "day",
+	}
+
+	startTime := time.Now()
+	_, err = client.Costs(context.Background(), query)
+	elapsed := time.Since(startTime)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+	// Should wait at least 1 second.
+	assert.GreaterOrEqual(t, elapsed, time.Second)
+}
+
+func TestClient_NonRetryable4xxErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+	}{
+		{"400 Bad Request", http.StatusBadRequest},
+		{"401 Unauthorized", http.StatusUnauthorized},
+		{"403 Forbidden", http.StatusForbidden},
+		{"404 Not Found", http.StatusNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				callCount++
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer server.Close()
+
+			client, err := New(Config{
+				BaseURL:    server.URL,
+				Token:      "test-token",
+				Timeout:    time.Second * 5,
+				MaxRetries: 3,
+				Logger:     NewNoopLogger(),
+			})
+			require.NoError(t, err)
+
+			query := Query{
+				WorkspaceToken: "test-workspace",
+				StartAt:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				EndAt:          time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+				Granularity:    "day",
+			}
+
+			_, err = client.Costs(context.Background(), query)
+			require.Error(t, err)
+			// Should NOT retry on 4xx errors (except 429).
+			assert.Equal(t, 1, callCount)
+		})
+	}
+}
+
 // Example usage demonstration.
 //
 //nolint:testableexamples // Example requires real API credentials
