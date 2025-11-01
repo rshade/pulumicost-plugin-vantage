@@ -50,6 +50,10 @@ jobs:
       - name: Load stub mappings into Wiremock
         run: |
           echo "Loading stub mappings..."
+          echo "Working directory: $(pwd)"
+          echo "Checking for mapping files:"
+          ls -la test/wiremock/mappings/ || echo "Directory not found"
+
           for mapping in test/wiremock/mappings/*.json; do
             if [ -f "$mapping" ]; then
               echo "Loading $(basename "$mapping")..."
@@ -57,6 +61,8 @@ jobs:
                 -H "Content-Type: application/json" \
                 -d @"$mapping" \
                 http://localhost:8080/__admin/mappings
+            else
+              echo "File not found: $mapping"
             fi
           done
 
