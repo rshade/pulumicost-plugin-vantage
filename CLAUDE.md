@@ -224,15 +224,38 @@ params:
 
 ### Contract Tests
 
+**Local Development:**
+
 - Run Wiremock server via `make wiremock-up`
+- Docker Compose automatically mounts `test/wiremock/mappings/` directory
+- Stub mappings are loaded on container startup
 - Mock `/costs` endpoint (multi-page pagination)
 - Mock `/forecast` endpoint
 - Assert adapter produces correct records
 
+**GitHub Actions CI:**
+
+- WireMock runs as a service container (no volume mount support)
+- **CRITICAL**: Stub mappings must be loaded via Admin API after service starts
+- The `contract.yml` workflow includes a step to POST each mapping file:
+
+  ```bash
+  for mapping in test/wiremock/mappings/*.json; do
+    curl -X POST -H "Content-Type: application/json" \
+      -d @"$mapping" http://localhost:8080/__admin/mappings
+  done
+  ```
+
+- Verify mappings loaded by checking `/__admin/mappings` endpoint
+- **Common Issue**: If tests fail with "No response could be served as there
+  are no stub mappings in this WireMock instance", the mapping load step
+  likely failed or is missing
+
 ### Fixtures Location
 
 - Golden samples: `internal/vantage/contracts/`
-- Wiremock mappings: `test/wiremock/`
+- Wiremock mappings: `test/wiremock/mappings/`
+- Current mappings: `costs_page1.json`, `costs_page2.json`, `forecast.json`
 
 ## Code Quality & Linting
 
