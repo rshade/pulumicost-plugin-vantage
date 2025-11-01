@@ -11,6 +11,9 @@ jobs:
       contains(github.event.comment.body, '/assign @opencode') ||
       contains(github.event.comment.body, '/opencode assign')
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.issue.number }}
+      cancel-in-progress: true
     permissions:
       issues: write
     steps:
@@ -23,3 +26,5 @@ jobs:
       - name: Confirm assignment
         run: |
           gh issue comment ${{ github.event.issue.number }} --body "✅ Assigned to @opencode"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

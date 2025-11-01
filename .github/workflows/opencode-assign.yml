@@ -16,11 +16,21 @@ jobs:
         github.event.comment.author_association == 'MEMBER' ||
         github.event.comment.author_association == 'COLLABORATOR'))
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.issue.number }}
+      cancel-in-progress: true
     permissions:
       issues: write
     steps:
       - name: Assign issue to opencode
         run: |
           gh issue edit ${{ github.event.issue.number }} --add-assignee opencode
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Confirm assignment
+        if: github.event_name == 'issue_comment'
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "✅ Assigned to @opencode"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,11 +13,20 @@ jobs:
       contains(github.event.issue.body, 'opencode') ||
       contains(github.event.issue.body, '/oc')
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.issue.number }}
+      cancel-in-progress: true
     permissions:
       issues: write
     steps:
       - name: Auto-assign to opencode
         run: |
           gh issue edit ${{ github.event.issue.number }} --add-assignee opencode
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add auto-assignment comment
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "🤖 Auto-assigned to @opencode based on issue keywords"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
