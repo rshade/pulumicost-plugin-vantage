@@ -425,6 +425,125 @@ func TestClient_ForecastRetry(t *testing.T) {
 	assert.Equal(t, 2, callCount) // Should have retried once
 }
 
+func TestClient_ForecastEmptyResponse(t *testing.T) {
+	// Test that empty forecast data is handled gracefully.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, "/cost_reports/test-report-token/forecast", r.URL.Path)
+
+		w.Header().Set("Content-Type", "application/json")
+		// Return empty data array.
+		_ = json.NewEncoder(w).Encode(ForecastResponse{Data: []ForecastRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 5,
+		MaxRetries: 0,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := ForecastQuery{
+		StartAt:     time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:       time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC),
+		Granularity: "day",
+	}
+
+	forecast, err := client.Forecast(context.Background(), "test-report-token", query)
+	require.NoError(t, err)
+	assert.Empty(t, forecast.Data) // Should handle empty data gracefully
+}
+
+func TestClient_ForecastNotFound(t *testing.T) {
+	// Test handling of 404 error when forecast report doesn't exist.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		assert.Contains(t, r.URL.Path, "/forecast")
+
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error": "Cost report not found"}`))
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 5,
+		MaxRetries: 0,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := ForecastQuery{
+		StartAt:     time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:       time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC),
+		Granularity: "day",
+	}
+
+	_, err = client.Forecast(context.Background(), "nonexistent-report-token", query)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "404")
+}
+
+func TestClient_ForecastMissingReportToken(t *testing.T) {
+	// Test handling of empty report token.
+	client, err := New(Config{
+		BaseURL:    "https://api.vantage.sh",
+		Token:      "test-token",
+		Timeout:    time.Second * 5,
+		MaxRetries: 0,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := ForecastQuery{
+		StartAt:     time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:       time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC),
+		Granularity: "day",
+	}
+
+	// Empty report token should result in a malformed URL error.
+	_, err = client.Forecast(context.Background(), "", query)
+	require.Error(t, err)
+}
+
+func TestClient_ForecastContextCancellation(t *testing.T) {
+	// Test that context cancellation is properly handled.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Simulate a slow response that will be cancelled.
+		time.Sleep(2 * time.Second)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(ForecastResponse{Data: []ForecastRow{}})
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		BaseURL:    server.URL,
+		Token:      "test-token",
+		Timeout:    time.Second * 10,
+		MaxRetries: 0,
+		Logger:     NewNoopLogger(),
+	})
+	require.NoError(t, err)
+
+	query := ForecastQuery{
+		StartAt:     time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
+		EndAt:       time.Date(2024, 2, 28, 0, 0, 0, 0, time.UTC),
+		Granularity: "day",
+	}
+
+	// Create context that will be cancelled immediately.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	_, err = client.Forecast(ctx, "test-report-token", query)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context canceled")
+}
+
 func TestRedactURL(t *testing.T) {
 	// Create a test HTTP client directly.
 	httpClient := &httpClient{
