@@ -45,9 +45,8 @@ dist/
 *~
 .DS_Store
 
-# Wiremock artifacts
+# Wiremock artifacts (stub mappings are committed, but response files are not)
 test/wiremock/__files/
-test/wiremock/mappings/
 
 # Temp files
 *.tmp
