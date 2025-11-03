@@ -59,7 +59,7 @@ func New(config Config) (Client, error) {
 	if config.Timeout <= 0 {
 		config.Timeout = defaultTimeout
 	}
-	if config.MaxRetries <= 0 {
+	if config.MaxRetries < 0 {
 		config.MaxRetries = defaultRetries
 	}
 	if config.BaseURL == "" {
